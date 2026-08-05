@@ -1,32 +1,65 @@
-# React + TypeScript + Vite
+# Spotify Podcast Manager
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Browse, filter, and remove podcast episodes saved in your Spotify library.
 
-Currently, two official plugins are available:
+A local React SPA that uses the Spotify Web API with Authorization Code + PKCE (no backend, no client secret).
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Features
 
-## React Compiler
+- Log in with Spotify (PKCE)
+- Load all saved podcast episodes from your library
+- Sort, filter, search, and paginate in a table
+- Remove selected episodes from your library
+- Mark as played & remove (clears resume position, then removes)
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Setup
 
-## Expanding the Oxlint configuration
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+2. Under **Redirect URIs**, add exactly:
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+   ```
+   http://127.0.0.1:5173/callback
+   ```
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+   Do not use `http://localhost` — Spotify rejects it for local development.
+3. Copy the Client ID and create your env file:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+4. Set `VITE_SPOTIFY_CLIENT_ID` in `.env` to your Client ID.
+
+## Run
+
+```bash
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Open [http://127.0.0.1:5173](http://127.0.0.1:5173) (same host as the redirect URI).
+
+## Scripts
+
+| Command         | Description              |
+| --------------- | ------------------------ |
+| `npm run dev`   | Start Vite dev server    |
+| `npm run build` | Typecheck and production build |
+| `npm run preview` | Preview production build |
+| `npm run lint`  | Run oxlint               |
+
+## Scopes
+
+Only the scopes needed for library episodes and resume position:
+
+- `user-library-read`
+- `user-library-modify`
+- `user-read-playback-position`
+
+## Stack
+
+React 19 · TypeScript · Vite · Chakra UI v3 · TanStack Table · Spotify Web API (PKCE)
+
+## Attribution
+
+Content provided by Spotify. This app does not cache Spotify content beyond immediate use and does not use the API to train models.
