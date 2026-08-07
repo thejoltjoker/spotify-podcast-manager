@@ -1,3 +1,7 @@
+import type { PlayStatus } from './playStatus'
+
+export type { PlayStatus } from './playStatus'
+
 export type SpotifyImage = {
   url: string
   height: number | null
@@ -79,7 +83,8 @@ export type EpisodeRow = {
   showName: string
   releaseDate: string
   durationMs: number
-  fullyPlayed: boolean
+  playStatus: PlayStatus
+  resumePositionMs: number
   imageUrl: string | null
   spotifyUrl: string
   addedAt: string

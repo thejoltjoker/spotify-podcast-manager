@@ -1,4 +1,5 @@
 import { spotifyFetch, spotifyJson } from './client'
+import { derivePlayStatus } from './playStatus'
 import type {
   EpisodeRow,
   PaginatedSavedEpisodes,
@@ -26,7 +27,8 @@ export function toEpisodeRow(
     showName: episode.show?.name ?? 'Unknown show',
     releaseDate: episode.release_date,
     durationMs: episode.duration_ms,
-    fullyPlayed: episode.resume_point?.fully_played ?? false,
+    playStatus: derivePlayStatus(episode.resume_point),
+    resumePositionMs: episode.resume_point?.resume_position_ms ?? 0,
     imageUrl: pickImageUrl(episode.images) ?? pickImageUrl(episode.show?.images),
     spotifyUrl: episode.external_urls.spotify,
     addedAt,

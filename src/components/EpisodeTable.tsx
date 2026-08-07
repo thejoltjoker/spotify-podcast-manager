@@ -34,7 +34,23 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import { LuCheckCheck, LuExternalLink, LuTrash2 } from 'react-icons/lu'
+import {
+  PLAY_STATUS_LABELS,
+  type PlayStatus,
+} from '@/lib/spotify/playStatus'
 import type { EpisodeRow } from '@/lib/spotify/types'
+
+const PLAY_STATUS_OPTIONS: { label: string; value: PlayStatus }[] = [
+  { label: PLAY_STATUS_LABELS.unplayed, value: 'unplayed' },
+  { label: PLAY_STATUS_LABELS.in_progress, value: 'in_progress' },
+  { label: PLAY_STATUS_LABELS.finished, value: 'finished' },
+]
+
+const PLAY_STATUS_COLORS: Record<PlayStatus, string> = {
+  unplayed: 'gray',
+  in_progress: 'orange',
+  finished: 'green',
+}
 
 const columnHelper = createColumnHelper<EpisodeRow>()
 
@@ -118,6 +134,7 @@ export function EpisodeTable({
   ])
   const [globalFilter, setGlobalFilter] = useState('')
   const [selectedShows, setSelectedShows] = useState<string[]>([])
+  const [selectedStatuses, setSelectedStatuses] = useState<PlayStatus[]>([])
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
 
@@ -140,10 +157,20 @@ export function EpisodeTable({
     initialItems: showItems,
     filter: contains,
   })
+  const {
+    collection: statusCollection,
+    set: setStatusCollection,
+  } = useListCollection({
+    initialItems: PLAY_STATUS_OPTIONS,
+  })
 
   useEffect(() => {
     setShowCollection(showItems)
   }, [showItems, setShowCollection])
+
+  useEffect(() => {
+    setStatusCollection(PLAY_STATUS_OPTIONS)
+  }, [setStatusCollection])
 
   useEffect(() => {
     const available = new Set(showItems.map((item) => item.value))
@@ -153,13 +180,16 @@ export function EpisodeTable({
     })
   }, [showItems])
 
-  const columnFilters = useMemo<ColumnFiltersState>(
-    () =>
-      selectedShows.length > 0
-        ? [{ id: 'showName', value: selectedShows }]
-        : [],
-    [selectedShows],
-  )
+  const columnFilters = useMemo<ColumnFiltersState>(() => {
+    const filters: ColumnFiltersState = []
+    if (selectedShows.length > 0) {
+      filters.push({ id: 'showName', value: selectedShows })
+    }
+    if (selectedStatuses.length > 0) {
+      filters.push({ id: 'playStatus', value: selectedStatuses })
+    }
+    return filters
+  }, [selectedShows, selectedStatuses])
 
   const columns = useMemo(
     () => [
@@ -247,18 +277,24 @@ export function EpisodeTable({
         header: 'Duration',
         cell: (info) => formatDuration(info.getValue()),
       }),
-      columnHelper.accessor('fullyPlayed', {
-        header: 'Played',
-        cell: (info) =>
-          info.getValue() ? (
-            <Badge colorPalette="green" size="sm">
-              Done
+      columnHelper.accessor('playStatus', {
+        header: 'Status',
+        filterFn: (row, columnId, filterValue: PlayStatus[]) => {
+          if (!filterValue?.length) return true
+          return filterValue.includes(row.getValue(columnId))
+        },
+        cell: (info) => {
+          const status = info.getValue()
+          return (
+            <Badge
+              colorPalette={PLAY_STATUS_COLORS[status]}
+              size="sm"
+              variant="subtle"
+            >
+              {PLAY_STATUS_LABELS[status]}
             </Badge>
-          ) : (
-            <Badge colorPalette="gray" size="sm" variant="subtle">
-              Unplayed
-            </Badge>
-          ),
+          )
+        },
       }),
       columnHelper.display({
         id: 'open',
@@ -426,13 +462,45 @@ export function EpisodeTable({
               </Combobox.Positioner>
             </Portal>
           </Combobox.Root>
+          <Combobox.Root
+            multiple
+            closeOnSelect={false}
+            width="2xs"
+            openOnClick
+            collection={statusCollection}
+            value={selectedStatuses}
+            onValueChange={(details) =>
+              setSelectedStatuses(details.value as PlayStatus[])
+            }
+            placeholder="Filter by status…"
+          >
+            <Combobox.Control>
+              <Combobox.Input />
+              <Combobox.IndicatorGroup>
+                <Combobox.ClearTrigger />
+                <Combobox.Trigger />
+              </Combobox.IndicatorGroup>
+            </Combobox.Control>
+            <Portal>
+              <Combobox.Positioner>
+                <Combobox.Content>
+                  {statusCollection.items.map((item) => (
+                    <Combobox.Item key={item.value} item={item}>
+                      <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                      <Combobox.ItemIndicator />
+                    </Combobox.Item>
+                  ))}
+                </Combobox.Content>
+              </Combobox.Positioner>
+            </Portal>
+          </Combobox.Root>
         </HStack>
         <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
           {filteredRows.length} of {data.length} episodes ·{' '}
           {formatTotalDuration(filteredDurationMs)} total
         </Text>
       </HStack>
-      {selectedShows.length > 0 ? (
+      {selectedShows.length > 0 || selectedStatuses.length > 0 ? (
         <HStack gap="2" flexWrap="wrap">
           {selectedShows.map((show) => (
             <Badge
@@ -447,6 +515,21 @@ export function EpisodeTable({
               title="Remove filter"
             >
               {show} ×
+            </Badge>
+          ))}
+          {selectedStatuses.map((status) => (
+            <Badge
+              key={status}
+              size="sm"
+              colorPalette={PLAY_STATUS_COLORS[status]}
+              variant="subtle"
+              cursor="pointer"
+              onClick={() =>
+                setSelectedStatuses((prev) => prev.filter((s) => s !== status))
+              }
+              title="Remove filter"
+            >
+              {PLAY_STATUS_LABELS[status]} ×
             </Badge>
           ))}
         </HStack>

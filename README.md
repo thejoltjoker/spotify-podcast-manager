@@ -9,6 +9,8 @@ A local React SPA that uses the Spotify Web API with Authorization Code + PKCE (
 - Log in with Spotify (PKCE)
 - Load all saved podcast episodes from your library
 - Sort, filter, search, and paginate in a table
+- Distinguish unplayed, in-progress, and finished episodes (from Spotify resume point)
+- Filter by podcast and play status
 - Remove selected episodes from your library
 - Mark as played & remove (clears resume position, then removes)
 
