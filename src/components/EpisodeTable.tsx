@@ -36,6 +36,8 @@ import {
 import { LuCheckCheck, LuExternalLink, LuTrash2 } from 'react-icons/lu'
 import {
   PLAY_STATUS_LABELS,
+  formatPlayProgress,
+  playProgressRatio,
   type PlayStatus,
 } from '@/lib/spotify/playStatus'
 import type { EpisodeRow } from '@/lib/spotify/types'
@@ -296,6 +298,44 @@ export function EpisodeTable({
           )
         },
       }),
+      columnHelper.accessor(
+        (row) =>
+          playProgressRatio(
+            row.playStatus,
+            row.resumePositionMs,
+            row.durationMs,
+          ),
+        {
+          id: 'progress',
+          header: 'Progress',
+          cell: ({ row }) => {
+            const progress = formatPlayProgress(
+              row.original.playStatus,
+              row.original.resumePositionMs,
+              row.original.durationMs,
+            )
+            if (progress) {
+              return (
+                <Text fontSize="sm" whiteSpace="nowrap">
+                  {progress}
+                </Text>
+              )
+            }
+            if (row.original.playStatus === 'finished') {
+              return (
+                <Text fontSize="sm" color="fg.muted">
+                  100%
+                </Text>
+              )
+            }
+            return (
+              <Text fontSize="sm" color="fg.muted">
+                —
+              </Text>
+            )
+          },
+        },
+      ),
       columnHelper.display({
         id: 'open',
         header: '',

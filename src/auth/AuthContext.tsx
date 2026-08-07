@@ -16,6 +16,7 @@ import {
 } from '@/lib/spotify/pkce'
 import { fetchCurrentUser } from '@/lib/spotify/episodes'
 import type { SpotifyUser, StoredTokens } from '@/lib/spotify/types'
+import { bootstrapAuth } from '@/auth/oauthBootstrap'
 
 type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'
 
@@ -64,42 +65,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     async function bootstrap() {
-      const params = new URLSearchParams(window.location.search)
-      const isCallback = window.location.pathname === '/callback'
+      const result = await bootstrapAuth({
+        pathname: window.location.pathname,
+        search: window.location.search,
+        replaceState: (url) => {
+          window.history.replaceState({}, '', url)
+        },
+        exchangeCodeForTokens,
+        loadTokens,
+      })
 
-      if (isCallback) {
-        const code = params.get('code')
-        const state = params.get('state')
-        const oauthError = params.get('error')
+      if (cancelled) return
 
-        window.history.replaceState({}, '', '/')
-
-        if (oauthError) {
-          if (!cancelled) {
-            setError(`Spotify login failed: ${oauthError}`)
-            setStatus('unauthenticated')
-          }
-          return
-        }
-
-        if (code && state) {
-          try {
-            const tokens = await exchangeCodeForTokens(code, state)
-            if (!cancelled) await applyTokens(tokens)
-          } catch (err) {
-            if (!cancelled) {
-              setError(err instanceof Error ? err.message : 'Login failed')
-              setStatus('unauthenticated')
-            }
-          }
-          return
-        }
+      if (result.status === 'authenticated') {
+        await applyTokens(result.tokens)
+        return
       }
 
-      const existing = loadTokens()
-      if (!cancelled) {
-        await applyTokens(existing)
-      }
+      setError(result.error ?? null)
+      setUser(null)
+      setStatus('unauthenticated')
     }
 
     void bootstrap()
