@@ -2,9 +2,6 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "spotify-podcast-manager",
   "compatibility_date": "2026-08-07",
-  "vars": {
-    "VITE_SPOTIFY_CLIENT_ID": "51d19090c679453b83e16d70479565ab",
-  },
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application",
