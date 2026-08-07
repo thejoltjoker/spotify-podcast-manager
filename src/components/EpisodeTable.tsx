@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActionBar,
   Badge,
@@ -20,7 +20,7 @@ import {
   useFilter,
   useListCollection,
   VStack,
-} from '@chakra-ui/react'
+} from "@chakra-ui/react";
 import {
   createColumnHelper,
   flexRender,
@@ -32,96 +32,98 @@ import {
   type ColumnFiltersState,
   type RowSelectionState,
   type SortingState,
-} from '@tanstack/react-table'
-import { LuCheckCheck, LuExternalLink, LuTrash2 } from 'react-icons/lu'
+} from "@tanstack/react-table";
+import { LuCheckCheck, LuExternalLink, LuTrash2 } from "react-icons/lu";
 import {
   PLAY_STATUS_LABELS,
   formatPlayProgress,
   playProgressRatio,
   type PlayStatus,
-} from '@/lib/spotify/playStatus'
-import type { EpisodeRow } from '@/lib/spotify/types'
+} from "@/lib/spotify/playStatus";
+import type { EpisodeRow } from "@/lib/spotify/types";
 
 const PLAY_STATUS_OPTIONS: { label: string; value: PlayStatus }[] = [
-  { label: PLAY_STATUS_LABELS.unplayed, value: 'unplayed' },
-  { label: PLAY_STATUS_LABELS.in_progress, value: 'in_progress' },
-  { label: PLAY_STATUS_LABELS.finished, value: 'finished' },
-]
+  { label: PLAY_STATUS_LABELS.unplayed, value: "unplayed" },
+  { label: PLAY_STATUS_LABELS.in_progress, value: "in_progress" },
+  { label: PLAY_STATUS_LABELS.finished, value: "finished" },
+];
 
 const PLAY_STATUS_COLORS: Record<PlayStatus, string> = {
-  unplayed: 'gray',
-  in_progress: 'orange',
-  finished: 'green',
-}
+  unplayed: "gray",
+  in_progress: "orange",
+  finished: "green",
+};
 
-const columnHelper = createColumnHelper<EpisodeRow>()
+const columnHelper = createColumnHelper<EpisodeRow>();
 
 function formatDuration(ms: number): string {
-  const totalSec = Math.floor(ms / 1000)
-  const hours = Math.floor(totalSec / 3600)
-  const minutes = Math.floor((totalSec % 3600) / 60)
-  const seconds = totalSec % 60
+  const totalSec = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSec / 3600);
+  const minutes = Math.floor((totalSec % 3600) / 60);
+  const seconds = totalSec % 60;
   if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
+    return `${hours}:${String(minutes).padStart(2, "0")}:${String(
+      seconds
+    ).padStart(2, "0")}`;
   }
-  return `${minutes}:${String(seconds).padStart(2, '0')}`
+  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function formatTotalDuration(ms: number): string {
-  const totalMin = Math.floor(ms / 60_000)
-  const hours = Math.floor(totalMin / 60)
-  const minutes = totalMin % 60
+  const totalMin = Math.floor(ms / 60_000);
+  const hours = Math.floor(totalMin / 60);
+  const minutes = totalMin % 60;
   if (hours > 0) {
-    return `${hours}h ${minutes}m`
+    return `${hours}h ${minutes}m`;
   }
-  return `${minutes}m`
+  return `${minutes}m`;
 }
 
-type ConfirmKind = 'remove' | 'markPlayedAndRemove'
+type ConfirmKind = "remove" | "markPlayedAndRemove";
 
 type ConfirmAction = {
-  kind: ConfirmKind
-  rows: EpisodeRow[]
-}
+  kind: ConfirmKind;
+  rows: EpisodeRow[];
+};
 
 type EpisodeTableProps = {
-  data: EpisodeRow[]
-  loading: boolean
-  onRemove: (rows: EpisodeRow[]) => Promise<void>
-  onMarkPlayedAndRemove: (rows: EpisodeRow[]) => Promise<void>
-  removing: boolean
-}
+  data: EpisodeRow[];
+  loading: boolean;
+  onRemove: (rows: EpisodeRow[]) => Promise<void>;
+  onMarkPlayedAndRemove: (rows: EpisodeRow[]) => Promise<void>;
+  removing: boolean;
+};
 
 function confirmCopy(action: ConfirmAction): {
-  title: string
-  description: string
-  confirmLabel: string
-  colorPalette: 'red' | 'green'
+  title: string;
+  description: string;
+  confirmLabel: string;
+  colorPalette: "red" | "green";
 } {
-  const count = action.rows.length
-  const singleName = action.rows[0]?.name
+  const count = action.rows.length;
+  const singleName = action.rows[0]?.name;
 
-  if (action.kind === 'markPlayedAndRemove') {
+  if (action.kind === "markPlayedAndRemove") {
     return {
-      title: 'Mark as played and remove?',
+      title: "Mark as played and remove?",
       description:
         count === 1
           ? `Mark “${singleName}” as played and remove it from your Spotify library?`
           : `Mark ${count} episodes as played and remove them from your Spotify library?`,
-      confirmLabel: 'Mark played & remove',
-      colorPalette: 'green',
-    }
+      confirmLabel: "Mark played & remove",
+      colorPalette: "green",
+    };
   }
 
   return {
-    title: 'Remove from library?',
+    title: "Remove from library?",
     description:
       count === 1
         ? `Remove “${singleName}” from your Spotify library?`
         : `Remove ${count} episodes from your Spotify library?`,
-    confirmLabel: 'Remove',
-    colorPalette: 'red',
-  }
+    confirmLabel: "Remove",
+    colorPalette: "red",
+  };
 }
 
 export function EpisodeTable({
@@ -132,82 +134,86 @@ export function EpisodeTable({
   removing,
 }: EpisodeTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
-    { id: 'releaseDate', desc: true },
-  ])
-  const [globalFilter, setGlobalFilter] = useState('')
-  const [selectedShows, setSelectedShows] = useState<string[]>([])
-  const [selectedStatuses, setSelectedStatuses] = useState<PlayStatus[]>([])
-  const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null)
+    { id: "releaseDate", desc: true },
+  ]);
+  const [globalFilter, setGlobalFilter] = useState("");
+  const [selectedShows, setSelectedShows] = useState<string[]>([]);
+  const [selectedStatuses, setSelectedStatuses] = useState<PlayStatus[]>([]);
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
+    null
+  );
 
   const requestConfirm = useCallback(
     (kind: ConfirmKind, rows: EpisodeRow[]) => {
-      if (rows.length === 0) return
-      setConfirmAction({ kind, rows })
+      if (rows.length === 0) return;
+      setConfirmAction({ kind, rows });
     },
-    [],
-  )
+    []
+  );
 
   const showItems = useMemo(() => {
-    const names = [...new Set(data.map((row) => row.showName).filter(Boolean))]
-    names.sort((a, b) => a.localeCompare(b))
-    return names.map((name) => ({ label: name, value: name }))
-  }, [data])
+    const names = [...new Set(data.map((row) => row.showName).filter(Boolean))];
+    names.sort((a, b) => a.localeCompare(b));
+    return names.map((name) => ({ label: name, value: name }));
+  }, [data]);
 
-  const { contains } = useFilter({ sensitivity: 'base' })
-  const { collection, filter, set: setShowCollection } = useListCollection({
+  const { contains } = useFilter({ sensitivity: "base" });
+  const {
+    collection,
+    filter,
+    set: setShowCollection,
+  } = useListCollection({
     initialItems: showItems,
     filter: contains,
-  })
-  const {
-    collection: statusCollection,
-    set: setStatusCollection,
-  } = useListCollection({
-    initialItems: PLAY_STATUS_OPTIONS,
-  })
+  });
+  const { collection: statusCollection, set: setStatusCollection } =
+    useListCollection({
+      initialItems: PLAY_STATUS_OPTIONS,
+    });
 
   useEffect(() => {
-    setShowCollection(showItems)
-  }, [showItems, setShowCollection])
+    setShowCollection(showItems);
+  }, [showItems, setShowCollection]);
 
   useEffect(() => {
-    setStatusCollection(PLAY_STATUS_OPTIONS)
-  }, [setStatusCollection])
+    setStatusCollection(PLAY_STATUS_OPTIONS);
+  }, [setStatusCollection]);
 
   useEffect(() => {
-    const available = new Set(showItems.map((item) => item.value))
+    const available = new Set(showItems.map((item) => item.value));
     setSelectedShows((prev) => {
-      const next = prev.filter((show) => available.has(show))
-      return next.length === prev.length ? prev : next
-    })
-  }, [showItems])
+      const next = prev.filter((show) => available.has(show));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [showItems]);
 
   const columnFilters = useMemo<ColumnFiltersState>(() => {
-    const filters: ColumnFiltersState = []
+    const filters: ColumnFiltersState = [];
     if (selectedShows.length > 0) {
-      filters.push({ id: 'showName', value: selectedShows })
+      filters.push({ id: "showName", value: selectedShows });
     }
     if (selectedStatuses.length > 0) {
-      filters.push({ id: 'playStatus', value: selectedStatuses })
+      filters.push({ id: "playStatus", value: selectedStatuses });
     }
-    return filters
-  }, [selectedShows, selectedStatuses])
+    return filters;
+  }, [selectedShows, selectedStatuses]);
 
   const columns = useMemo(
     () => [
       columnHelper.display({
-        id: 'select',
+        id: "select",
         header: ({ table }) => (
           <Checkbox.Root
             checked={
               table.getIsAllPageRowsSelected()
                 ? true
                 : table.getIsSomePageRowsSelected()
-                  ? 'indeterminate'
-                  : false
+                ? "indeterminate"
+                : false
             }
             onCheckedChange={(details) => {
-              table.toggleAllPageRowsSelected(!!details.checked)
+              table.toggleAllPageRowsSelected(!!details.checked);
             }}
             aria-label="Select all on page"
           >
@@ -222,7 +228,7 @@ export function EpisodeTable({
             checked={row.getIsSelected()}
             disabled={!row.getCanSelect()}
             onCheckedChange={(details) => {
-              row.toggleSelected(!!details.checked)
+              row.toggleSelected(!!details.checked);
             }}
             aria-label={`Select ${row.original.name}`}
           >
@@ -235,8 +241,8 @@ export function EpisodeTable({
         size: 40,
       }),
       columnHelper.display({
-        id: 'artwork',
-        header: '',
+        id: "artwork",
+        header: "",
         cell: ({ row }) =>
           row.original.imageUrl ? (
             <Image
@@ -251,19 +257,19 @@ export function EpisodeTable({
           ),
         size: 56,
       }),
-      columnHelper.accessor('name', {
-        header: 'Episode',
+      columnHelper.accessor("name", {
+        header: "Episode",
         cell: (info) => (
           <Text fontWeight="medium" lineClamp={2}>
             {info.getValue()}
           </Text>
         ),
       }),
-      columnHelper.accessor('showName', {
-        header: 'Show',
+      columnHelper.accessor("showName", {
+        header: "Show",
         filterFn: (row, columnId, filterValue: string[]) => {
-          if (!filterValue?.length) return true
-          return filterValue.includes(row.getValue(columnId))
+          if (!filterValue?.length) return true;
+          return filterValue.includes(row.getValue(columnId));
         },
         cell: (info) => (
           <Text color="fg.muted" lineClamp={1}>
@@ -271,22 +277,22 @@ export function EpisodeTable({
           </Text>
         ),
       }),
-      columnHelper.accessor('releaseDate', {
-        header: 'Released',
+      columnHelper.accessor("releaseDate", {
+        header: "Released",
         cell: (info) => info.getValue(),
       }),
-      columnHelper.accessor('durationMs', {
-        header: 'Duration',
+      columnHelper.accessor("durationMs", {
+        header: "Duration",
         cell: (info) => formatDuration(info.getValue()),
       }),
-      columnHelper.accessor('playStatus', {
-        header: 'Status',
+      columnHelper.accessor("playStatus", {
+        header: "Status",
         filterFn: (row, columnId, filterValue: PlayStatus[]) => {
-          if (!filterValue?.length) return true
-          return filterValue.includes(row.getValue(columnId))
+          if (!filterValue?.length) return true;
+          return filterValue.includes(row.getValue(columnId));
         },
         cell: (info) => {
-          const status = info.getValue()
+          const status = info.getValue();
           return (
             <Badge
               colorPalette={PLAY_STATUS_COLORS[status]}
@@ -295,7 +301,7 @@ export function EpisodeTable({
             >
               {PLAY_STATUS_LABELS[status]}
             </Badge>
-          )
+          );
         },
       }),
       columnHelper.accessor(
@@ -303,42 +309,42 @@ export function EpisodeTable({
           playProgressRatio(
             row.playStatus,
             row.resumePositionMs,
-            row.durationMs,
+            row.durationMs
           ),
         {
-          id: 'progress',
-          header: 'Progress',
+          id: "progress",
+          header: "Progress",
           cell: ({ row }) => {
             const progress = formatPlayProgress(
               row.original.playStatus,
               row.original.resumePositionMs,
-              row.original.durationMs,
-            )
+              row.original.durationMs
+            );
             if (progress) {
               return (
                 <Text fontSize="sm" whiteSpace="nowrap">
                   {progress}
                 </Text>
-              )
+              );
             }
-            if (row.original.playStatus === 'finished') {
+            if (row.original.playStatus === "finished") {
               return (
                 <Text fontSize="sm" color="fg.muted">
                   100%
                 </Text>
-              )
+              );
             }
             return (
               <Text fontSize="sm" color="fg.muted">
                 —
               </Text>
-            )
+            );
           },
-        },
+        }
       ),
       columnHelper.display({
-        id: 'open',
-        header: '',
+        id: "open",
+        header: "",
         cell: ({ row }) => (
           <IconButton
             asChild
@@ -346,7 +352,11 @@ export function EpisodeTable({
             variant="ghost"
             aria-label="Open in Spotify"
           >
-            <Link href={row.original.spotifyUrl} target="_blank" rel="noreferrer">
+            <Link
+              href={row.original.spotifyUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
               <LuExternalLink />
             </Link>
           </IconButton>
@@ -354,8 +364,8 @@ export function EpisodeTable({
         size: 48,
       }),
       columnHelper.display({
-        id: 'markPlayedAndRemove',
-        header: '',
+        id: "markPlayedAndRemove",
+        header: "",
         cell: ({ row }) => (
           <IconButton
             size="sm"
@@ -365,7 +375,7 @@ export function EpisodeTable({
             title="Mark as played and remove"
             disabled={removing}
             onClick={() =>
-              requestConfirm('markPlayedAndRemove', [row.original])
+              requestConfirm("markPlayedAndRemove", [row.original])
             }
           >
             <LuCheckCheck />
@@ -374,8 +384,8 @@ export function EpisodeTable({
         size: 48,
       }),
       columnHelper.display({
-        id: 'remove',
-        header: '',
+        id: "remove",
+        header: "",
         cell: ({ row }) => (
           <IconButton
             size="sm"
@@ -384,7 +394,7 @@ export function EpisodeTable({
             aria-label={`Remove ${row.original.name}`}
             title="Remove from library"
             disabled={removing}
-            onClick={() => requestConfirm('remove', [row.original])}
+            onClick={() => requestConfirm("remove", [row.original])}
           >
             <LuTrash2 />
           </IconButton>
@@ -392,8 +402,8 @@ export function EpisodeTable({
         size: 48,
       }),
     ],
-    [removing, requestConfirm],
-  )
+    [removing, requestConfirm]
+  );
 
   const table = useReactTable({
     data,
@@ -412,44 +422,44 @@ export function EpisodeTable({
     initialState: {
       pagination: { pageSize: 25 },
     },
-  })
+  });
 
-  const pageCount = table.getPageCount()
-  const pageIndex = table.getState().pagination.pageIndex
+  const pageCount = table.getPageCount();
+  const pageIndex = table.getState().pagination.pageIndex;
   useEffect(() => {
     if (pageCount > 0 && pageIndex >= pageCount) {
-      table.setPageIndex(pageCount - 1)
+      table.setPageIndex(pageCount - 1);
     }
-  }, [pageCount, pageIndex, table])
+  }, [pageCount, pageIndex, table]);
 
   const selectedRows = table
     .getSelectedRowModel()
-    .rows.map((row) => row.original)
+    .rows.map((row) => row.original);
 
-  const filteredRows = table.getFilteredRowModel().rows
+  const filteredRows = table.getFilteredRowModel().rows;
   const filteredDurationMs = filteredRows.reduce(
     (sum, row) => sum + row.original.durationMs,
-    0,
-  )
+    0
+  );
 
   async function handleConfirm() {
-    if (!confirmAction) return
-    const { kind, rows } = confirmAction
-    if (kind === 'markPlayedAndRemove') {
-      await onMarkPlayedAndRemove(rows)
+    if (!confirmAction) return;
+    const { kind, rows } = confirmAction;
+    if (kind === "markPlayedAndRemove") {
+      await onMarkPlayedAndRemove(rows);
     } else {
-      await onRemove(rows)
+      await onRemove(rows);
     }
-    setConfirmAction(null)
-    const removedIds = new Set(rows.map((row) => row.id))
+    setConfirmAction(null);
+    const removedIds = new Set(rows.map((row) => row.id));
     setRowSelection((prev) => {
-      const next = { ...prev }
-      for (const id of removedIds) delete next[id]
-      return next
-    })
+      const next = { ...prev };
+      for (const id of removedIds) delete next[id];
+      return next;
+    });
   }
 
-  const dialog = confirmAction ? confirmCopy(confirmAction) : null
+  const dialog = confirmAction ? confirmCopy(confirmAction) : null;
 
   if (loading) {
     return (
@@ -457,7 +467,7 @@ export function EpisodeTable({
         <Spinner size="lg" />
         <Text color="fg.muted">Loading saved episodes…</Text>
       </VStack>
-    )
+    );
   }
 
   return (
@@ -536,7 +546,7 @@ export function EpisodeTable({
           </Combobox.Root>
         </HStack>
         <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
-          {filteredRows.length} of {data.length} episodes ·{' '}
+          {filteredRows.length} of {data.length} episodes ·{" "}
           {formatTotalDuration(filteredDurationMs)} total
         </Text>
       </HStack>
@@ -577,7 +587,9 @@ export function EpisodeTable({
 
       {data.length === 0 ? (
         <Box py="12" textAlign="center">
-          <Text color="fg.muted">No saved podcast episodes in your library.</Text>
+          <Text color="fg.muted">
+            No saved podcast episodes in your library.
+          </Text>
         </Box>
       ) : (
         <>
@@ -587,13 +599,17 @@ export function EpisodeTable({
                 {table.getHeaderGroups().map((headerGroup) => (
                   <Table.Row key={headerGroup.id}>
                     {headerGroup.headers.map((header) => {
-                      const canSort = header.column.getCanSort()
+                      const canSort = header.column.getCanSort();
                       return (
                         <Table.ColumnHeader
                           key={header.id}
-                          w={header.getSize() !== 150 ? `${header.getSize()}px` : undefined}
-                          cursor={canSort ? 'pointer' : undefined}
-                          userSelect={canSort ? 'none' : undefined}
+                          w={
+                            header.getSize() !== 150
+                              ? `${header.getSize()}px`
+                              : undefined
+                          }
+                          cursor={canSort ? "pointer" : undefined}
+                          userSelect={canSort ? "none" : undefined}
                           onClick={
                             canSort
                               ? header.column.getToggleSortingHandler()
@@ -604,26 +620,29 @@ export function EpisodeTable({
                             ? null
                             : flexRender(
                                 header.column.columnDef.header,
-                                header.getContext(),
+                                header.getContext()
                               )}
                           {{
-                            asc: ' ↑',
-                            desc: ' ↓',
+                            asc: " ↑",
+                            desc: " ↓",
                           }[header.column.getIsSorted() as string] ?? null}
                         </Table.ColumnHeader>
-                      )
+                      );
                     })}
                   </Table.Row>
                 ))}
               </Table.Header>
               <Table.Body>
                 {table.getRowModel().rows.map((row) => (
-                  <Table.Row key={row.id} data-selected={row.getIsSelected() || undefined}>
+                  <Table.Row
+                    key={row.id}
+                    data-selected={row.getIsSelected() || undefined}
+                  >
                     {row.getVisibleCells().map((cell) => (
                       <Table.Cell key={cell.id}>
                         {flexRender(
                           cell.column.columnDef.cell,
-                          cell.getContext(),
+                          cell.getContext()
                         )}
                       </Table.Cell>
                     ))}
@@ -635,7 +654,7 @@ export function EpisodeTable({
 
           <HStack justify="space-between">
             <Text fontSize="sm" color="fg.muted">
-              Page {table.getState().pagination.pageIndex + 1} of{' '}
+              Page {table.getState().pagination.pageIndex + 1} of{" "}
               {table.getPageCount() || 1}
             </Text>
             <HStack>
@@ -663,7 +682,7 @@ export function EpisodeTable({
       <ActionBar.Root
         open={selectedRows.length > 0}
         onOpenChange={(details) => {
-          if (!details.open) setRowSelection({})
+          if (!details.open) setRowSelection({});
         }}
         closeOnInteractOutside={false}
       >
@@ -680,7 +699,7 @@ export function EpisodeTable({
                 variant="outline"
                 disabled={removing}
                 onClick={() =>
-                  requestConfirm('markPlayedAndRemove', selectedRows)
+                  requestConfirm("markPlayedAndRemove", selectedRows)
                 }
               >
                 <LuCheckCheck />
@@ -691,7 +710,7 @@ export function EpisodeTable({
                 colorPalette="red"
                 variant="outline"
                 disabled={removing}
-                onClick={() => requestConfirm('remove', selectedRows)}
+                onClick={() => requestConfirm("remove", selectedRows)}
               >
                 <LuTrash2 />
                 Remove
@@ -711,7 +730,7 @@ export function EpisodeTable({
         lazyMount
         open={confirmAction !== null}
         onOpenChange={(details) => {
-          if (!details.open) setConfirmAction(null)
+          if (!details.open) setConfirmAction(null);
         }}
       >
         <Portal>
@@ -731,7 +750,7 @@ export function EpisodeTable({
                   </Button>
                 </Dialog.ActionTrigger>
                 <Button
-                  colorPalette={dialog?.colorPalette ?? 'red'}
+                  colorPalette={dialog?.colorPalette ?? "red"}
                   loading={removing}
                   onClick={() => void handleConfirm()}
                 >
@@ -746,5 +765,5 @@ export function EpisodeTable({
         </Portal>
       </Dialog.Root>
     </VStack>
-  )
+  );
 }

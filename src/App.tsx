@@ -16,6 +16,7 @@ import {
   fetchAllSavedEpisodes,
   removeEpisodesFromLibrary,
 } from '@/lib/spotify/episodes'
+import { REDIRECT_URI } from '@/lib/spotify/pkce'
 import type { EpisodeRow } from '@/lib/spotify/types'
 
 function LoginScreen({
@@ -44,7 +45,7 @@ function LoginScreen({
         <Text fontSize="xs" color="fg.muted">
           Content provided by Spotify. Redirect URI must be{' '}
           <Text as="span" fontFamily="mono">
-            http://127.0.0.1:5173/callback
+            {REDIRECT_URI}
           </Text>
         </Text>
       </VStack>

@@ -2,7 +2,7 @@
 
 Browse, filter, and remove podcast episodes saved in your Spotify library.
 
-A local React SPA that uses the Spotify Web API with Authorization Code + PKCE (no backend, no client secret).
+A React SPA that uses the Spotify Web API with Authorization Code + PKCE (no backend, no client secret). Can run locally or deploy to Cloudflare Workers as static assets.
 
 ## Features
 
@@ -17,13 +17,13 @@ A local React SPA that uses the Spotify Web API with Authorization Code + PKCE (
 ## Setup
 
 1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
-2. Under **Redirect URIs**, add exactly:
+2. Under **Redirect URIs**, add:
 
    ```
    http://127.0.0.1:5173/callback
    ```
 
-   Do not use `http://localhost` — Spotify rejects it for local development.
+   Do not use `http://localhost` — Spotify rejects it for local development. After you deploy, also add `https://<your-worker-host>/callback`.
 3. Copy the Client ID and create your env file:
 
    ```bash
@@ -41,14 +41,26 @@ npm run dev
 
 Open [http://127.0.0.1:5173](http://127.0.0.1:5173) (same host as the redirect URI).
 
+## Deploy (Cloudflare Workers)
+
+The app ships as static assets via [`wrangler.jsonc`](wrangler.jsonc) (`dist/` + SPA fallback for `/callback`).
+
+1. In the Worker → **Settings** → **Build**, set:
+   - **Build command:** `npm run build`
+   - **Deploy command:** `npx wrangler deploy` (default)
+   - **Build variable:** `VITE_SPOTIFY_CLIENT_ID` = your Spotify Client ID
+2. Push to the connected GitHub branch (or run `npm run deploy` locally).
+3. In the Spotify Dashboard, add redirect URI `https://<your-worker-host>/callback`.
+
 ## Scripts
 
-| Command         | Description              |
-| --------------- | ------------------------ |
-| `npm run dev`   | Start Vite dev server    |
-| `npm run build` | Typecheck and production build |
-| `npm run preview` | Preview production build |
-| `npm run lint`  | Run oxlint               |
+| Command           | Description                        |
+| ----------------- | ---------------------------------- |
+| `npm run dev`     | Start Vite dev server              |
+| `npm run build`   | Typecheck and production build     |
+| `npm run preview` | Preview production build           |
+| `npm run deploy`  | Build and deploy with Wrangler     |
+| `npm run lint`    | Run oxlint                         |
 
 ## Scopes
 
