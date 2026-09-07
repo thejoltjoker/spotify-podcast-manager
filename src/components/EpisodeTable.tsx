@@ -4,6 +4,7 @@ import {
   Badge,
   Box,
   Button,
+  ButtonGroup,
   Checkbox,
   CloseButton,
   Combobox,
@@ -13,6 +14,7 @@ import {
   Image,
   Input,
   Link,
+  Pagination,
   Portal,
   Spinner,
   Table,
@@ -33,7 +35,13 @@ import {
   type RowSelectionState,
   type SortingState,
 } from "@tanstack/react-table";
-import { LuCheckCheck, LuExternalLink, LuTrash2 } from "react-icons/lu";
+import {
+  LuCheckCheck,
+  LuChevronLeft,
+  LuChevronRight,
+  LuExternalLink,
+  LuTrash2,
+} from "react-icons/lu";
 import {
   PLAY_STATUS_LABELS,
   formatPlayProgress,
@@ -652,29 +660,39 @@ export function EpisodeTable({
             </Table.Root>
           </Table.ScrollArea>
 
-          <HStack justify="space-between">
-            <Text fontSize="sm" color="fg.muted">
-              Page {table.getState().pagination.pageIndex + 1} of{" "}
-              {table.getPageCount() || 1}
-            </Text>
-            <HStack>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => table.previousPage()}
-                disabled={!table.getCanPreviousPage()}
-              >
-                Previous
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => table.nextPage()}
-                disabled={!table.getCanNextPage()}
-              >
-                Next
-              </Button>
-            </HStack>
+          <HStack justify="flex-end">
+            <Pagination.Root
+              count={filteredRows.length}
+              pageSize={table.getState().pagination.pageSize}
+              page={pageIndex + 1}
+              onPageChange={(details) => {
+                table.setPageIndex(details.page - 1);
+              }}
+            >
+              <ButtonGroup variant="ghost" size="sm">
+                <Pagination.PrevTrigger asChild>
+                  <IconButton aria-label="Previous page">
+                    <LuChevronLeft />
+                  </IconButton>
+                </Pagination.PrevTrigger>
+
+                <Pagination.Items
+                  render={(page) => (
+                    <IconButton
+                      variant={{ base: "ghost", _selected: "outline" }}
+                    >
+                      {page.value}
+                    </IconButton>
+                  )}
+                />
+
+                <Pagination.NextTrigger asChild>
+                  <IconButton aria-label="Next page">
+                    <LuChevronRight />
+                  </IconButton>
+                </Pagination.NextTrigger>
+              </ButtonGroup>
+            </Pagination.Root>
           </HStack>
         </>
       )}
