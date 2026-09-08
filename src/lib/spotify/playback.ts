@@ -177,55 +177,25 @@ async function putPlayBody(
   })
 }
 
-async function waitForEpisode(
-  uri: string,
-  {
-    attempts = 8,
-    delayMs = 450,
-  }: { attempts?: number; delayMs?: number } = {},
-): Promise<boolean> {
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    await sleep(delayMs)
-    const state = await fetchPlaybackState()
-    if (isPlayingUri(state, uri) || isCurrentUri(state, uri)) {
-      if (!state?.is_playing) {
-        try {
-          await putPlayBody({}, state?.device?.id)
-        } catch {
-          // ignore resume nudge failures
-        }
-      }
-      return true
-    }
-  }
-  return false
-}
-
 function buildPlayAttempts(
   uri: string,
   positionMs: number,
   showUri: string | null | undefined,
   activeDeviceId: string | null,
-  fallbackDeviceId: string | null,
 ): Array<() => Promise<void>> {
   const attempts: Array<() => Promise<void>> = []
 
-  // 1. No device_id — Spotify targets the currently active Connect device.
-  //    This is the most reliable path when music is already playing.
+  // Prefer omitting device_id so Spotify uses the already-active player.
   attempts.push(() =>
     putPlayBody({ uris: [uri], position_ms: positionMs }),
   )
-  attempts.push(() => putPlayBody({ uris: [uri] }))
 
-  // 2. Explicit device from current playback state.
   if (activeDeviceId) {
     attempts.push(() =>
       putPlayBody({ uris: [uri], position_ms: positionMs }, activeDeviceId),
     )
-    attempts.push(() => putPlayBody({ uris: [uri] }, activeDeviceId))
   }
 
-  // 3. Show context + episode offset (some clients accept this for podcasts).
   if (showUri) {
     attempts.push(() =>
       putPlayBody({
@@ -234,32 +204,16 @@ function buildPlayAttempts(
         position_ms: positionMs,
       }),
     )
-    if (activeDeviceId) {
-      attempts.push(() =>
-        putPlayBody(
-          {
-            context_uri: showUri,
-            offset: { uri },
-            position_ms: positionMs,
-          },
-          activeDeviceId,
-        ),
-      )
-    }
-  }
-
-  // 4. Fallback device from the devices list (may differ from playback state).
-  if (fallbackDeviceId && fallbackDeviceId !== activeDeviceId) {
-    attempts.push(() =>
-      putPlayBody({ uris: [uri], position_ms: positionMs }, fallbackDeviceId),
-    )
   }
 
   return attempts
 }
 
 /**
- * Start an episode on the active Connect device (works when Spotify is already playing).
+ * Start an episode on the active Connect device.
+ * Returns true when the play command was accepted (204). Spotify often starts
+ * playback before /me/player reflects the episode, so we do not require
+ * playback-state confirmation.
  */
 export async function playEpisodeViaConnect(
   uri: string,
@@ -269,18 +223,16 @@ export async function playEpisodeViaConnect(
   const state = await fetchPlaybackState()
   const activeDeviceId = state?.device?.id ?? null
 
-  let fallbackDeviceId: string | null = null
-  try {
-    fallbackDeviceId = await ensurePlaybackDeviceId()
-  } catch {
-    fallbackDeviceId = null
-  }
-
-  if (!activeDeviceId && !fallbackDeviceId) {
-    throw new SpotifyApiError(
-      404,
-      'Player command failed: No active device found',
-    )
+  if (!activeDeviceId) {
+    // Wake / resolve a device only when nothing appears active yet.
+    try {
+      await ensurePlaybackDeviceId()
+    } catch {
+      throw new SpotifyApiError(
+        404,
+        'Player command failed: No active device found',
+      )
+    }
   }
 
   const attempts = buildPlayAttempts(
@@ -288,25 +240,17 @@ export async function playEpisodeViaConnect(
     positionMs,
     showUri,
     activeDeviceId,
-    fallbackDeviceId,
   )
 
-  let sawSuccess = false
   for (const attempt of attempts) {
     try {
       await attempt()
-      sawSuccess = true
-      if (await waitForEpisode(uri)) {
-        return true
-      }
+      // Spotify often starts playback before /me/player catches up.
+      // A 204 from play is enough — do not deep-link afterward.
+      return true
     } catch {
       // Try the next strategy.
     }
-  }
-
-  // Command may have been accepted asynchronously — one last check.
-  if (sawSuccess && (await waitForEpisode(uri, { attempts: 4, delayMs: 600 }))) {
-    return true
   }
 
   return false

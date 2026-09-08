@@ -143,10 +143,10 @@ function EpisodesPage() {
           positionMs: playbackPositionMs(row.playStatus, row.resumePositionMs),
         })),
       )
-      const via =
+        const via =
         result.method === 'connect'
           ? 'on your Spotify device'
-          : 'via the Spotify app'
+          : 'via the Spotify app link'
       if (result.remainingCount === 0) {
         toaster.create({
           title: 'Playing episode',

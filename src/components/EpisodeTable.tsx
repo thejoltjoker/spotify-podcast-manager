@@ -14,6 +14,7 @@ import {
   Image,
   Input,
   Link,
+  Menu,
   Pagination,
   Portal,
   Spinner,
@@ -39,6 +40,7 @@ import {
   LuCheckCheck,
   LuChevronLeft,
   LuChevronRight,
+  LuEllipsisVertical,
   LuExternalLink,
   LuListPlus,
   LuPlay,
@@ -360,97 +362,144 @@ export function EpisodeTable({
         }
       ),
       columnHelper.display({
-        id: "open",
+        id: "actions",
         header: "",
-        cell: ({ row }) => (
-          <IconButton
-            asChild
-            size="sm"
-            variant="ghost"
-            aria-label="Open in Spotify"
-          >
-            <Link
-              href={row.original.spotifyUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <LuExternalLink />
-            </Link>
-          </IconButton>
-        ),
-        size: 48,
-      }),
-      columnHelper.display({
-        id: "play",
-        header: "",
-        cell: ({ row }) => (
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label={`Play “${row.original.name}”`}
-            title="Play now"
-            disabled={actionsDisabled}
-            onClick={() => void onPlay([row.original])}
-          >
-            <LuPlay />
-          </IconButton>
-        ),
-        size: 48,
-      }),
-      columnHelper.display({
-        id: "queue",
-        header: "",
-        cell: ({ row }) => (
-          <IconButton
-            size="sm"
-            variant="ghost"
-            aria-label={`Add “${row.original.name}” to queue`}
-            title="Add to queue"
-            disabled={actionsDisabled}
-            onClick={() => void onQueue([row.original])}
-          >
-            <LuListPlus />
-          </IconButton>
-        ),
-        size: 48,
-      }),
-      columnHelper.display({
-        id: "markPlayedAndRemove",
-        header: "",
-        cell: ({ row }) => (
-          <IconButton
-            size="sm"
-            variant="ghost"
-            colorPalette="green"
-            aria-label={`Mark “${row.original.name}” as played and remove`}
-            title="Mark as played and remove"
-            disabled={actionsDisabled}
-            onClick={() =>
-              requestConfirm("markPlayedAndRemove", [row.original])
-            }
-          >
-            <LuCheckCheck />
-          </IconButton>
-        ),
-        size: 48,
-      }),
-      columnHelper.display({
-        id: "remove",
-        header: "",
-        cell: ({ row }) => (
-          <IconButton
-            size="sm"
-            variant="ghost"
-            colorPalette="red"
-            aria-label={`Remove ${row.original.name}`}
-            title="Remove from library"
-            disabled={actionsDisabled}
-            onClick={() => requestConfirm("remove", [row.original])}
-          >
-            <LuTrash2 />
-          </IconButton>
-        ),
-        size: 48,
+        cell: ({ row }) => {
+          const episode = row.original;
+          return (
+            <>
+              <HStack gap="0" display={{ base: "none", xl: "flex" }}>
+                <IconButton
+                  asChild
+                  size="sm"
+                  variant="ghost"
+                  aria-label="Open in Spotify"
+                >
+                  <Link
+                    href={episode.spotifyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <LuExternalLink />
+                  </Link>
+                </IconButton>
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Play “${episode.name}”`}
+                  title="Play now"
+                  disabled={actionsDisabled}
+                  onClick={() => void onPlay([episode])}
+                >
+                  <LuPlay />
+                </IconButton>
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  aria-label={`Add “${episode.name}” to queue`}
+                  title="Add to queue"
+                  disabled={actionsDisabled}
+                  onClick={() => void onQueue([episode])}
+                >
+                  <LuListPlus />
+                </IconButton>
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  colorPalette="green"
+                  aria-label={`Mark “${episode.name}” as played and remove`}
+                  title="Mark as played and remove"
+                  disabled={actionsDisabled}
+                  onClick={() =>
+                    requestConfirm("markPlayedAndRemove", [episode])
+                  }
+                >
+                  <LuCheckCheck />
+                </IconButton>
+                <IconButton
+                  size="sm"
+                  variant="ghost"
+                  colorPalette="red"
+                  aria-label={`Remove ${episode.name}`}
+                  title="Remove from library"
+                  disabled={actionsDisabled}
+                  onClick={() => requestConfirm("remove", [episode])}
+                >
+                  <LuTrash2 />
+                </IconButton>
+              </HStack>
+
+              <Box display={{ base: "block", xl: "none" }}>
+                <Menu.Root positioning={{ placement: "bottom-end" }}>
+                  <Menu.Trigger asChild>
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      aria-label={`Actions for “${episode.name}”`}
+                    >
+                      <LuEllipsisVertical />
+                    </IconButton>
+                  </Menu.Trigger>
+                  <Portal>
+                    <Menu.Positioner>
+                      <Menu.Content>
+                        <Menu.Item value="open" asChild>
+                          <Link
+                            href={episode.spotifyUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            <LuExternalLink />
+                            Open in Spotify
+                          </Link>
+                        </Menu.Item>
+                        <Menu.Item
+                          value="play"
+                          disabled={actionsDisabled}
+                          onSelect={() => void onPlay([episode])}
+                        >
+                          <LuPlay />
+                          Play now
+                        </Menu.Item>
+                        <Menu.Item
+                          value="queue"
+                          disabled={actionsDisabled}
+                          onSelect={() => void onQueue([episode])}
+                        >
+                          <LuListPlus />
+                          Add to queue
+                        </Menu.Item>
+                        <Menu.Separator />
+                        <Menu.Item
+                          value="markPlayedAndRemove"
+                          color="fg.success"
+                          disabled={actionsDisabled}
+                          onSelect={() =>
+                            requestConfirm("markPlayedAndRemove", [episode])
+                          }
+                        >
+                          <LuCheckCheck />
+                          Mark played & remove
+                        </Menu.Item>
+                        <Menu.Item
+                          value="remove"
+                          color="fg.error"
+                          disabled={actionsDisabled}
+                          onSelect={() =>
+                            requestConfirm("remove", [episode])
+                          }
+                        >
+                          <LuTrash2 />
+                          Remove from library
+                        </Menu.Item>
+                      </Menu.Content>
+                    </Menu.Positioner>
+                  </Portal>
+                </Menu.Root>
+              </Box>
+            </>
+          );
+        },
       }),
     ],
     [actionsDisabled, onPlay, onQueue, requestConfirm]
@@ -523,84 +572,92 @@ export function EpisodeTable({
 
   return (
     <VStack align="stretch" gap="4">
-      <HStack gap="3" flexWrap="wrap" justify="space-between" align="start">
-        <HStack gap="3" flexWrap="wrap" flex="1" minW="0">
-          <Input
-            maxW="sm"
-            placeholder="Filter episodes…"
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
-          />
-          <Combobox.Root
-            multiple
-            closeOnSelect={false}
-            width="xs"
-            openOnClick
-            collection={collection}
-            value={selectedShows}
-            onValueChange={(details) => setSelectedShows(details.value)}
-            onInputValueChange={(details) => filter(details.inputValue)}
-            placeholder="Filter by podcast…"
-          >
-            <Combobox.Control>
-              <Combobox.Input />
-              <Combobox.IndicatorGroup>
-                <Combobox.ClearTrigger />
-                <Combobox.Trigger />
-              </Combobox.IndicatorGroup>
-            </Combobox.Control>
-            <Portal>
-              <Combobox.Positioner>
-                <Combobox.Content>
-                  <Combobox.Empty>No podcasts found</Combobox.Empty>
-                  {collection.items.map((item) => (
-                    <Combobox.Item key={item.value} item={item}>
-                      <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                      <Combobox.ItemIndicator />
-                    </Combobox.Item>
-                  ))}
-                </Combobox.Content>
-              </Combobox.Positioner>
-            </Portal>
-          </Combobox.Root>
-          <Combobox.Root
-            multiple
-            closeOnSelect={false}
-            width="2xs"
-            openOnClick
-            collection={statusCollection}
-            value={selectedStatuses}
-            onValueChange={(details) =>
-              setSelectedStatuses(details.value as PlayStatus[])
-            }
-            placeholder="Filter by status…"
-          >
-            <Combobox.Control>
-              <Combobox.Input />
-              <Combobox.IndicatorGroup>
-                <Combobox.ClearTrigger />
-                <Combobox.Trigger />
-              </Combobox.IndicatorGroup>
-            </Combobox.Control>
-            <Portal>
-              <Combobox.Positioner>
-                <Combobox.Content>
-                  {statusCollection.items.map((item) => (
-                    <Combobox.Item key={item.value} item={item}>
-                      <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                      <Combobox.ItemIndicator />
-                    </Combobox.Item>
-                  ))}
-                </Combobox.Content>
-              </Combobox.Positioner>
-            </Portal>
-          </Combobox.Root>
-        </HStack>
-        <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
-          {filteredRows.length} of {data.length} episodes ·{" "}
-          {formatTotalDuration(filteredDurationMs)} total
-        </Text>
+      <HStack gap="3" w="full">
+        <Input
+          flex="1"
+          minW="2xs"
+          placeholder="Filter episodes…"
+          value={globalFilter}
+          onChange={(e) => setGlobalFilter(e.target.value)}
+        />
+        <Combobox.Root
+          multiple
+          closeOnSelect={false}
+          flex="1"
+          minW="2xs"
+          width="full"
+          openOnClick
+          collection={collection}
+          value={selectedShows}
+          onValueChange={(details) => setSelectedShows(details.value)}
+          onInputValueChange={(details) => filter(details.inputValue)}
+          placeholder="Filter by podcast…"
+        >
+          <Combobox.Control>
+            <Combobox.Input />
+            <Combobox.IndicatorGroup>
+              <Combobox.ClearTrigger />
+              <Combobox.Trigger />
+            </Combobox.IndicatorGroup>
+          </Combobox.Control>
+          <Portal>
+            <Combobox.Positioner>
+              <Combobox.Content>
+                <Combobox.Empty>No podcasts found</Combobox.Empty>
+                {collection.items.map((item) => (
+                  <Combobox.Item key={item.value} item={item}>
+                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                    <Combobox.ItemIndicator />
+                  </Combobox.Item>
+                ))}
+              </Combobox.Content>
+            </Combobox.Positioner>
+          </Portal>
+        </Combobox.Root>
+        <Combobox.Root
+          multiple
+          closeOnSelect={false}
+          flex="1"
+          minW="2xs"
+          width="full"
+          openOnClick
+          collection={statusCollection}
+          value={selectedStatuses}
+          onValueChange={(details) =>
+            setSelectedStatuses(details.value as PlayStatus[])
+          }
+          placeholder="Filter by status…"
+        >
+          <Combobox.Control>
+            <Combobox.Input />
+            <Combobox.IndicatorGroup>
+              <Combobox.ClearTrigger />
+              <Combobox.Trigger />
+            </Combobox.IndicatorGroup>
+          </Combobox.Control>
+          <Portal>
+            <Combobox.Positioner>
+              <Combobox.Content>
+                {statusCollection.items.map((item) => (
+                  <Combobox.Item key={item.value} item={item}>
+                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                    <Combobox.ItemIndicator />
+                  </Combobox.Item>
+                ))}
+              </Combobox.Content>
+            </Combobox.Positioner>
+          </Portal>
+        </Combobox.Root>
       </HStack>
+      <Text
+        fontSize="sm"
+        color="fg.muted"
+        whiteSpace="nowrap"
+        alignSelf="flex-end"
+      >
+        {filteredRows.length} of {data.length} episodes ·{" "}
+        {formatTotalDuration(filteredDurationMs)} total
+      </Text>
       {selectedShows.length > 0 || selectedStatuses.length > 0 ? (
         <HStack gap="2" flexWrap="wrap">
           {selectedShows.map((show) => (
