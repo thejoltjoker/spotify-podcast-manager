@@ -16,6 +16,12 @@ import {
   fetchAllSavedEpisodes,
   removeEpisodesFromLibrary,
 } from '@/lib/spotify/episodes'
+import {
+  formatPlaybackError,
+  playbackPositionMs,
+  playThenQueue,
+  queueEpisodes,
+} from '@/lib/spotify/playback'
 import { REDIRECT_URI } from '@/lib/spotify/pkce'
 import type { EpisodeRow } from '@/lib/spotify/types'
 
@@ -58,6 +64,7 @@ function EpisodesPage() {
   const [episodes, setEpisodes] = useState<EpisodeRow[]>([])
   const [loading, setLoading] = useState(true)
   const [removing, setRemoving] = useState(false)
+  const [playbackBusy, setPlaybackBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadEpisodes = useCallback(async () => {
@@ -124,6 +131,72 @@ function EpisodesPage() {
     [removeRows],
   )
 
+  const handlePlay = useCallback(async (rows: EpisodeRow[]) => {
+    if (rows.length === 0) return
+    setPlaybackBusy(true)
+    try {
+      const result = await playThenQueue(
+        rows.map((row) => ({
+          id: row.id,
+          uri: row.uri,
+          showUri: row.showUri,
+          positionMs: playbackPositionMs(row.playStatus, row.resumePositionMs),
+        })),
+      )
+      const via =
+        result.method === 'connect'
+          ? 'on your Spotify device'
+          : 'via the Spotify app'
+      if (result.remainingCount === 0) {
+        toaster.create({
+          title: 'Playing episode',
+          description: `Started ${via}`,
+          type: 'success',
+        })
+      } else if (result.queuedRemaining) {
+        toaster.create({
+          title: 'Playing episode',
+          description: `Started ${via}; queued ${result.remainingCount} more`,
+          type: 'success',
+        })
+      } else {
+        toaster.create({
+          title: 'Playing episode',
+          description: `Started ${via}, but could not queue the rest`,
+          type: 'warning',
+        })
+      }
+    } catch (err) {
+      toaster.create({
+        title: 'Play failed',
+        description: formatPlaybackError(err),
+        type: 'error',
+      })
+    } finally {
+      setPlaybackBusy(false)
+    }
+  }, [])
+
+  const handleQueue = useCallback(async (rows: EpisodeRow[]) => {
+    if (rows.length === 0) return
+    setPlaybackBusy(true)
+    try {
+      await queueEpisodes(rows.map((r) => r.uri))
+      toaster.create({
+        title: `Added ${rows.length} episode${rows.length === 1 ? '' : 's'} to queue`,
+        type: 'success',
+      })
+    } catch (err) {
+      toaster.create({
+        title: 'Queue failed',
+        description: formatPlaybackError(err),
+        type: 'error',
+      })
+    } finally {
+      setPlaybackBusy(false)
+    }
+  }, [])
+
   return (
     <Box minH="100vh" py="6">
       <Container maxW="7xl">
@@ -154,7 +227,10 @@ function EpisodesPage() {
               loading={loading}
               onRemove={handleRemove}
               onMarkPlayedAndRemove={handleMarkPlayedAndRemove}
+              onPlay={handlePlay}
+              onQueue={handleQueue}
               removing={removing}
+              playbackBusy={playbackBusy}
             />
           )}
         </VStack>

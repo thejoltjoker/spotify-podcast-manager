@@ -73,6 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         exchangeCodeForTokens,
         loadTokens,
+        clearTokens,
       })
 
       if (cancelled) return

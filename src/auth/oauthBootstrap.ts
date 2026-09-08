@@ -1,3 +1,4 @@
+import { tokensHaveRequiredScopes } from '@/lib/spotify/pkce'
 import type { StoredTokens } from '@/lib/spotify/types'
 
 export type BootstrapResult =
@@ -13,6 +14,7 @@ export type BootstrapDeps = {
     state: string,
   ) => Promise<StoredTokens>
   loadTokens: () => StoredTokens | null
+  clearTokens: () => void
 }
 
 /** Shared so React StrictMode remounts await the same callback exchange. */
@@ -63,6 +65,13 @@ export async function bootstrapAuth(
 
   const existing = deps.loadTokens()
   if (existing) {
+    if (!tokensHaveRequiredScopes(existing)) {
+      deps.clearTokens()
+      return {
+        status: 'unauthenticated',
+        error: 'Please log in again to grant playback permissions.',
+      }
+    }
     return { status: 'authenticated', tokens: existing }
   }
   return { status: 'unauthenticated' }

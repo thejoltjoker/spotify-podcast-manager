@@ -40,6 +40,8 @@ import {
   LuChevronLeft,
   LuChevronRight,
   LuExternalLink,
+  LuListPlus,
+  LuPlay,
   LuTrash2,
 } from "react-icons/lu";
 import {
@@ -99,7 +101,10 @@ type EpisodeTableProps = {
   loading: boolean;
   onRemove: (rows: EpisodeRow[]) => Promise<void>;
   onMarkPlayedAndRemove: (rows: EpisodeRow[]) => Promise<void>;
+  onPlay: (rows: EpisodeRow[]) => Promise<void>;
+  onQueue: (rows: EpisodeRow[]) => Promise<void>;
   removing: boolean;
+  playbackBusy: boolean;
 };
 
 function confirmCopy(action: ConfirmAction): {
@@ -139,8 +144,12 @@ export function EpisodeTable({
   loading,
   onRemove,
   onMarkPlayedAndRemove,
+  onPlay,
+  onQueue,
   removing,
+  playbackBusy,
 }: EpisodeTableProps) {
+  const actionsDisabled = removing || playbackBusy;
   const [sorting, setSorting] = useState<SortingState>([
     { id: "releaseDate", desc: true },
   ]);
@@ -372,6 +381,40 @@ export function EpisodeTable({
         size: 48,
       }),
       columnHelper.display({
+        id: "play",
+        header: "",
+        cell: ({ row }) => (
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={`Play “${row.original.name}”`}
+            title="Play now"
+            disabled={actionsDisabled}
+            onClick={() => void onPlay([row.original])}
+          >
+            <LuPlay />
+          </IconButton>
+        ),
+        size: 48,
+      }),
+      columnHelper.display({
+        id: "queue",
+        header: "",
+        cell: ({ row }) => (
+          <IconButton
+            size="sm"
+            variant="ghost"
+            aria-label={`Add “${row.original.name}” to queue`}
+            title="Add to queue"
+            disabled={actionsDisabled}
+            onClick={() => void onQueue([row.original])}
+          >
+            <LuListPlus />
+          </IconButton>
+        ),
+        size: 48,
+      }),
+      columnHelper.display({
         id: "markPlayedAndRemove",
         header: "",
         cell: ({ row }) => (
@@ -381,7 +424,7 @@ export function EpisodeTable({
             colorPalette="green"
             aria-label={`Mark “${row.original.name}” as played and remove`}
             title="Mark as played and remove"
-            disabled={removing}
+            disabled={actionsDisabled}
             onClick={() =>
               requestConfirm("markPlayedAndRemove", [row.original])
             }
@@ -401,7 +444,7 @@ export function EpisodeTable({
             colorPalette="red"
             aria-label={`Remove ${row.original.name}`}
             title="Remove from library"
-            disabled={removing}
+            disabled={actionsDisabled}
             onClick={() => requestConfirm("remove", [row.original])}
           >
             <LuTrash2 />
@@ -410,7 +453,7 @@ export function EpisodeTable({
         size: 48,
       }),
     ],
-    [removing, requestConfirm]
+    [actionsDisabled, onPlay, onQueue, requestConfirm]
   );
 
   const table = useReactTable({
@@ -713,9 +756,29 @@ export function EpisodeTable({
               <ActionBar.Separator />
               <Button
                 size="sm"
+                variant="outline"
+                disabled={actionsDisabled}
+                loading={playbackBusy}
+                onClick={() => void onPlay(selectedRows)}
+              >
+                <LuPlay />
+                Play
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={actionsDisabled}
+                loading={playbackBusy}
+                onClick={() => void onQueue(selectedRows)}
+              >
+                <LuListPlus />
+                Add to queue
+              </Button>
+              <Button
+                size="sm"
                 colorPalette="green"
                 variant="outline"
-                disabled={removing}
+                disabled={actionsDisabled}
                 onClick={() =>
                   requestConfirm("markPlayedAndRemove", selectedRows)
                 }
@@ -727,7 +790,7 @@ export function EpisodeTable({
                 size="sm"
                 colorPalette="red"
                 variant="outline"
-                disabled={removing}
+                disabled={actionsDisabled}
                 onClick={() => requestConfirm("remove", selectedRows)}
               >
                 <LuTrash2 />
@@ -763,13 +826,14 @@ export function EpisodeTable({
               </Dialog.Body>
               <Dialog.Footer>
                 <Dialog.ActionTrigger asChild>
-                  <Button variant="outline" disabled={removing}>
+                  <Button variant="outline" disabled={actionsDisabled}>
                     Cancel
                   </Button>
                 </Dialog.ActionTrigger>
                 <Button
                   colorPalette={dialog?.colorPalette ?? "red"}
                   loading={removing}
+                  disabled={actionsDisabled}
                   onClick={() => void handleConfirm()}
                 >
                   {dialog?.confirmLabel}

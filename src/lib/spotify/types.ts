@@ -14,6 +14,7 @@ export type SpotifyShow = {
   publisher: string
   images: SpotifyImage[]
   external_urls: { spotify: string }
+  uri?: string
 }
 
 export type SpotifyEpisode = {
@@ -68,6 +69,8 @@ export type StoredTokens = {
   accessToken: string
   refreshToken: string
   expiresAt: number
+  /** Space-separated scopes granted with this token set */
+  scope?: string
 }
 
 export type SpotifyUser = {
@@ -81,6 +84,7 @@ export type EpisodeRow = {
   uri: string
   name: string
   showName: string
+  showUri: string | null
   releaseDate: string
   durationMs: number
   playStatus: PlayStatus

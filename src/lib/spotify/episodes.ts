@@ -20,11 +20,14 @@ export function toEpisodeRow(
   episode: SpotifyEpisode,
   addedAt: string,
 ): EpisodeRow {
+  const showId = episode.show?.id
   return {
     id: episode.id,
     uri: episode.uri,
     name: episode.name,
     showName: episode.show?.name ?? 'Unknown show',
+    showUri:
+      episode.show?.uri ?? (showId ? `spotify:show:${showId}` : null),
     releaseDate: episode.release_date,
     durationMs: episode.duration_ms,
     playStatus: derivePlayStatus(episode.resume_point),

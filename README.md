@@ -11,6 +11,7 @@ A React SPA that uses the Spotify Web API with Authorization Code + PKCE (no bac
 - Sort, filter, search, and paginate in a table
 - Distinguish unplayed, in-progress, and finished episodes (from Spotify resume point)
 - Filter by podcast and play status
+- Play now / add to queue on your active Spotify device (Premium; Play falls back to opening the Spotify app if needed)
 - Remove selected episodes from your library
 - Mark as played & remove (clears resume position, then removes)
 
@@ -64,11 +65,13 @@ The app ships as static assets via [`wrangler.jsonc`](wrangler.jsonc) (`dist/` +
 
 ## Scopes
 
-Only the scopes needed for library episodes and resume position:
+Only the scopes needed for library episodes, resume position, and playback control:
 
 - `user-library-read`
 - `user-library-modify`
 - `user-read-playback-position`
+- `user-read-playback-state`
+- `user-modify-playback-state`
 
 ## Stack
 

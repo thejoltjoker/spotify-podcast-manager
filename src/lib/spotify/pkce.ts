@@ -1,13 +1,29 @@
 const AUTH_URL = 'https://accounts.spotify.com/authorize'
 const TOKEN_URL = 'https://accounts.spotify.com/api/token'
 
-export const SCOPES = [
+export const REQUIRED_SCOPES = [
   'user-library-read',
   'user-library-modify',
   'user-read-playback-position',
-].join(' ')
+  'user-read-playback-state',
+  'user-modify-playback-state',
+] as const
 
-export const REDIRECT_URI = `${window.location.origin}/callback`
+export const SCOPES = REQUIRED_SCOPES.join(' ')
+
+export function tokensHaveRequiredScopes(
+  tokens: import('./types').StoredTokens,
+): boolean {
+  const granted = new Set(
+    (tokens.scope ?? '')
+      .split(/\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean),
+  )
+  return REQUIRED_SCOPES.every((scope) => granted.has(scope))
+}
+
+export const REDIRECT_URI = `${typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1'}/callback`
 
 const VERIFIER_KEY = 'spotify_pkce_verifier'
 const STATE_KEY = 'spotify_pkce_state'
@@ -127,6 +143,7 @@ export async function exchangeCodeForTokens(
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token,
     expiresAt: Date.now() + tokens.expires_in * 1000,
+    scope: tokens.scope,
   }
   saveTokens(stored)
   return stored
@@ -135,6 +152,7 @@ export async function exchangeCodeForTokens(
 export async function refreshAccessToken(
   refreshToken: string,
 ): Promise<import('./types').StoredTokens> {
+  const existing = loadTokens()
   const body = new URLSearchParams({
     client_id: getClientId(),
     grant_type: 'refresh_token',
@@ -153,6 +171,7 @@ export async function refreshAccessToken(
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token ?? refreshToken,
     expiresAt: Date.now() + tokens.expires_in * 1000,
+    scope: tokens.scope || existing?.scope,
   }
   saveTokens(stored)
   return stored
