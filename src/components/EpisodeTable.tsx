@@ -46,6 +46,7 @@ import {
   LuPlay,
   LuTrash2,
 } from "react-icons/lu";
+import { formatDuration, formatTotalDuration } from "@/lib/format";
 import {
   PLAY_STATUS_LABELS,
   formatPlayProgress,
@@ -53,6 +54,9 @@ import {
   type PlayStatus,
 } from "@/lib/spotify/playStatus";
 import type { EpisodeRow } from "@/lib/spotify/types";
+import { Tooltip } from "@/components/ui/tooltip";
+
+const PREMIUM_HINT = "Requires Spotify Premium";
 
 const PLAY_STATUS_OPTIONS: { label: string; value: PlayStatus }[] = [
   { label: PLAY_STATUS_LABELS.unplayed, value: "unplayed" },
@@ -67,29 +71,6 @@ const PLAY_STATUS_COLORS: Record<PlayStatus, string> = {
 };
 
 const columnHelper = createColumnHelper<EpisodeRow>();
-
-function formatDuration(ms: number): string {
-  const totalSec = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSec / 3600);
-  const minutes = Math.floor((totalSec % 3600) / 60);
-  const seconds = totalSec % 60;
-  if (hours > 0) {
-    return `${hours}:${String(minutes).padStart(2, "0")}:${String(
-      seconds
-    ).padStart(2, "0")}`;
-  }
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
-}
-
-function formatTotalDuration(ms: number): string {
-  const totalMin = Math.floor(ms / 60_000);
-  const hours = Math.floor(totalMin / 60);
-  const minutes = totalMin % 60;
-  if (hours > 0) {
-    return `${hours}h ${minutes}m`;
-  }
-  return `${minutes}m`;
-}
 
 type ConfirmKind = "remove" | "markPlayedAndRemove";
 
@@ -107,6 +88,8 @@ type EpisodeTableProps = {
   onQueue: (rows: EpisodeRow[]) => Promise<void>;
   removing: boolean;
   playbackBusy: boolean;
+  /** Player API requires Spotify Premium */
+  playbackAllowed?: boolean;
 };
 
 function confirmCopy(action: ConfirmAction): {
@@ -150,8 +133,11 @@ export function EpisodeTable({
   onQueue,
   removing,
   playbackBusy,
+  playbackAllowed = true,
 }: EpisodeTableProps) {
   const actionsDisabled = removing || playbackBusy;
+  const playbackDisabled = actionsDisabled || !playbackAllowed;
+  const playbackTitle = playbackAllowed ? undefined : PREMIUM_HINT;
   const [sorting, setSorting] = useState<SortingState>([
     { id: "releaseDate", desc: true },
   ]);
@@ -383,26 +369,30 @@ export function EpisodeTable({
                     <LuExternalLink />
                   </Link>
                 </IconButton>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`Play “${episode.name}”`}
-                  title="Play now"
-                  disabled={actionsDisabled}
-                  onClick={() => void onPlay([episode])}
-                >
-                  <LuPlay />
-                </IconButton>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  aria-label={`Add “${episode.name}” to queue`}
-                  title="Add to queue"
-                  disabled={actionsDisabled}
-                  onClick={() => void onQueue([episode])}
-                >
-                  <LuListPlus />
-                </IconButton>
+                <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Play “${episode.name}”`}
+                    title={playbackTitle ?? "Play now"}
+                    disabled={playbackDisabled}
+                    onClick={() => void onPlay([episode])}
+                  >
+                    <LuPlay />
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    aria-label={`Add “${episode.name}” to queue`}
+                    title={playbackTitle ?? "Add to queue"}
+                    disabled={playbackDisabled}
+                    onClick={() => void onQueue([episode])}
+                  >
+                    <LuListPlus />
+                  </IconButton>
+                </Tooltip>
                 <IconButton
                   size="sm"
                   variant="ghost"
@@ -455,16 +445,18 @@ export function EpisodeTable({
                         </Menu.Item>
                         <Menu.Item
                           value="play"
-                          disabled={actionsDisabled}
+                          disabled={playbackDisabled}
                           onSelect={() => void onPlay([episode])}
+                          title={playbackTitle}
                         >
                           <LuPlay />
                           Play now
                         </Menu.Item>
                         <Menu.Item
                           value="queue"
-                          disabled={actionsDisabled}
+                          disabled={playbackDisabled}
                           onSelect={() => void onQueue([episode])}
+                          title={playbackTitle}
                         >
                           <LuListPlus />
                           Add to queue
@@ -502,7 +494,7 @@ export function EpisodeTable({
         },
       }),
     ],
-    [actionsDisabled, onPlay, onQueue, requestConfirm]
+    [actionsDisabled, playbackAllowed, playbackDisabled, playbackTitle, onPlay, onQueue, requestConfirm]
   );
 
   const table = useReactTable({
@@ -811,26 +803,32 @@ export function EpisodeTable({
                 {selectedRows.length} selected
               </ActionBar.SelectionTrigger>
               <ActionBar.Separator />
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={actionsDisabled}
-                loading={playbackBusy}
-                onClick={() => void onPlay(selectedRows)}
-              >
-                <LuPlay />
-                Play
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={actionsDisabled}
-                loading={playbackBusy}
-                onClick={() => void onQueue(selectedRows)}
-              >
-                <LuListPlus />
-                Add to queue
-              </Button>
+              <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={playbackDisabled}
+                  loading={playbackBusy}
+                  title={playbackTitle}
+                  onClick={() => void onPlay(selectedRows)}
+                >
+                  <LuPlay />
+                  Play
+                </Button>
+              </Tooltip>
+              <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={playbackDisabled}
+                  loading={playbackBusy}
+                  title={playbackTitle}
+                  onClick={() => void onQueue(selectedRows)}
+                >
+                  <LuListPlus />
+                  Add to queue
+                </Button>
+              </Tooltip>
               <Button
                 size="sm"
                 colorPalette="green"

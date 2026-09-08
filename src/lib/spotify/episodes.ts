@@ -1,4 +1,5 @@
-import { spotifyFetch, spotifyJson } from './client'
+import { spotifyJson } from './client'
+import { removeFromLibrary } from './library'
 import { derivePlayStatus } from './playStatus'
 import type {
   EpisodeRow,
@@ -8,8 +9,6 @@ import type {
 } from './types'
 
 const PAGE_SIZE = 50
-/** DELETE /me/library max URIs per request */
-const REMOVE_BATCH_SIZE = 40
 
 function pickImageUrl(images: { url: string }[] | undefined): string | null {
   if (!images?.length) return null
@@ -65,11 +64,5 @@ export async function fetchAllSavedEpisodes(): Promise<EpisodeRow[]> {
 }
 
 export async function removeEpisodesFromLibrary(uris: string[]): Promise<void> {
-  for (let i = 0; i < uris.length; i += REMOVE_BATCH_SIZE) {
-    const batch = uris.slice(i, i + REMOVE_BATCH_SIZE)
-    const params = new URLSearchParams({ uris: batch.join(',') })
-    await spotifyFetch(`/me/library?${params.toString()}`, {
-      method: 'DELETE',
-    })
-  }
+  await removeFromLibrary(uris)
 }

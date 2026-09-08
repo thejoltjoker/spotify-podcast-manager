@@ -23,6 +23,8 @@ type AuthStatus = 'loading' | 'authenticated' | 'unauthenticated'
 type AuthContextValue = {
   status: AuthStatus
   user: SpotifyUser | null
+  /** Player API requires Spotify Premium */
+  isPremium: boolean
   error: string | null
   login: () => Promise<void>
   logout: () => void
@@ -113,6 +115,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       status,
       user,
+      // `product` requires user-read-private and may be absent; only treat
+      // explicitly free/open accounts as non-Premium so Premium users aren't blocked.
+      isPremium:
+        user?.product == null ||
+        user.product === 'premium',
       error,
       login,
       logout,

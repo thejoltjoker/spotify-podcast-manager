@@ -16,9 +16,10 @@ type DevicesResponse = {
   devices: SpotifyDevice[]
 }
 
-type PlaybackState = {
+export type PlaybackState = {
   is_playing?: boolean
   currently_playing_type?: string
+  progress_ms?: number | null
   item?: { uri?: string; type?: string } | null
   device?: { id?: string | null; name?: string } | null
 }
@@ -30,6 +31,16 @@ export function playbackPositionMs(
 ): number {
   if (playStatus === 'finished') return 0
   return Math.max(0, resumePositionMs)
+}
+
+/** Seek when progress differs from the desired position by more than 10s. */
+export function shouldSeek(
+  progressMs: number | null | undefined,
+  desiredMs: number,
+): boolean {
+  if (desiredMs <= 0 && (progressMs == null || progressMs <= 0)) return false
+  const current = Math.max(0, progressMs ?? 0)
+  return Math.abs(current - desiredMs) > 10_000
 }
 
 function deviceTypeRank(type: string): number {
@@ -77,7 +88,7 @@ function sleep(ms: number): Promise<void> {
 
 async function fetchDevices(): Promise<SpotifyDevice[]> {
   const response = await spotifyJson<DevicesResponse>('/me/player/devices')
-  return response.devices ?? []
+  return response?.devices ?? []
 }
 
 function withDeviceId(path: string, deviceId: string): string {
@@ -85,12 +96,14 @@ function withDeviceId(path: string, deviceId: string): string {
   return `${path}${separator}device_id=${encodeURIComponent(deviceId)}`
 }
 
-async function fetchPlaybackState(): Promise<PlaybackState | null> {
+export async function fetchPlaybackState(): Promise<PlaybackState | null> {
   const response = await spotifyFetch(
     '/me/player?additional_types=track,episode',
   )
   if (response.status === 204) return null
-  return (await response.json()) as PlaybackState
+  const text = await response.text()
+  if (!text.trim()) return null
+  return JSON.parse(text) as PlaybackState
 }
 
 export function isPlayingUri(
@@ -109,44 +122,40 @@ export function isCurrentUri(
 }
 
 /**
- * Open via the OS protocol handler. Must use top-level navigation — hidden
- * iframes are ignored by modern browsers for custom schemes.
- */
-export function openInSpotifyApp(uri: string): void {
-  if (uri.startsWith('http://') || uri.startsWith('https://')) {
-    window.open(uri, '_blank', 'noopener,noreferrer')
-    return
-  }
-  window.location.assign(uri)
-}
-
-/**
  * Resolve a device id for Player commands.
  * Prefer an already-active device (e.g. something currently playing).
+ * Only transfer when nothing is active — never pause an active player.
  */
-export async function ensurePlaybackDeviceId(): Promise<string> {
-  // Playback state is the source of truth for "what's actually playing".
+export async function ensurePlaybackDeviceId(): Promise<{
+  deviceId: string
+  deviceName: string | null
+}> {
   const state = await fetchPlaybackState()
   if (state?.device?.id) {
-    return state.device.id
+    return {
+      deviceId: state.device.id,
+      deviceName: state.device.name ?? null,
+    }
   }
 
   const devices = await fetchDevices()
   const ranked = rankDevices(devices)
   const active = ranked.find((device) => device.is_active)
-  const deviceId = active?.id ?? ranked[0]?.id
-  if (!deviceId) {
+  const chosen = active ?? ranked[0]
+  if (!chosen) {
     throw new SpotifyApiError(
       404,
       'Player command failed: No active device found',
     )
   }
 
+  // Transfer only when no device is already active. play:false would pause
+  // an active session, so we only wake idle devices.
   if (!active) {
     try {
       await spotifyFetch('/me/player', {
         method: 'PUT',
-        body: JSON.stringify({ device_ids: [deviceId], play: false }),
+        body: JSON.stringify({ device_ids: [chosen.id], play: false }),
       })
       await sleep(800)
     } catch {
@@ -154,129 +163,104 @@ export async function ensurePlaybackDeviceId(): Promise<string> {
     }
   }
 
-  return deviceId
+  return { deviceId: chosen.id, deviceName: chosen.name }
 }
 
-type PlayBody = {
-  uris?: string[]
-  context_uri?: string
-  offset?: { uri: string }
-  position_ms?: number
-}
-
-async function putPlayBody(
-  body: PlayBody,
-  deviceId?: string | null,
-): Promise<void> {
-  const path = deviceId
-    ? withDeviceId('/me/player/play', deviceId)
-    : '/me/player/play'
-  await spotifyFetch(path, {
-    method: 'PUT',
-    body: JSON.stringify(body),
-  })
-}
-
-function buildPlayAttempts(
-  uri: string,
-  positionMs: number,
-  showUri: string | null | undefined,
-  activeDeviceId: string | null,
-): Array<() => Promise<void>> {
-  const attempts: Array<() => Promise<void>> = []
-
-  // Prefer omitting device_id so Spotify uses the already-active player.
-  attempts.push(() =>
-    putPlayBody({ uris: [uri], position_ms: positionMs }),
-  )
-
-  if (activeDeviceId) {
-    attempts.push(() =>
-      putPlayBody({ uris: [uri], position_ms: positionMs }, activeDeviceId),
-    )
-  }
-
-  if (showUri) {
-    attempts.push(() =>
-      putPlayBody({
-        context_uri: showUri,
-        offset: { uri },
-        position_ms: positionMs,
-      }),
-    )
-  }
-
-  return attempts
-}
-
-/**
- * Start an episode on the active Connect device.
- * Returns true when the play command was accepted (204). Spotify often starts
- * playback before /me/player reflects the episode, so we do not require
- * playback-state confirmation.
- */
-export async function playEpisodeViaConnect(
-  uri: string,
-  positionMs: number,
-  showUri?: string | null,
-): Promise<boolean> {
-  const state = await fetchPlaybackState()
-  const activeDeviceId = state?.device?.id ?? null
-
-  if (!activeDeviceId) {
-    // Wake / resolve a device only when nothing appears active yet.
-    try {
-      await ensurePlaybackDeviceId()
-    } catch {
-      throw new SpotifyApiError(
-        404,
-        'Player command failed: No active device found',
-      )
-    }
-  }
-
-  const attempts = buildPlayAttempts(
-    uri,
-    positionMs,
-    showUri,
-    activeDeviceId,
-  )
-
-  for (const attempt of attempts) {
-    try {
-      await attempt()
-      // Spotify often starts playback before /me/player catches up.
-      // A 204 from play is enough — do not deep-link afterward.
-      return true
-    } catch {
-      // Try the next strategy.
-    }
-  }
-
-  return false
-}
-
-export async function queueEpisode(
-  uri: string,
-  deviceId?: string,
-): Promise<void> {
-  const targetDeviceId = deviceId ?? (await ensurePlaybackDeviceId())
+export async function queueItem(uri: string, deviceId: string): Promise<void> {
   const params = new URLSearchParams({ uri })
   await spotifyFetch(
-    withDeviceId(`/me/player/queue?${params.toString()}`, targetDeviceId),
+    withDeviceId(`/me/player/queue?${params.toString()}`, deviceId),
     { method: 'POST' },
   )
 }
 
-export async function queueEpisodes(
-  uris: string[],
-  deviceId?: string,
+export async function skipToNext(deviceId: string): Promise<void> {
+  await spotifyFetch(withDeviceId('/me/player/next', deviceId), {
+    method: 'POST',
+  })
+}
+
+export async function seekTo(
+  positionMs: number,
+  deviceId: string,
 ): Promise<void> {
-  if (uris.length === 0) return
-  const targetDeviceId = deviceId ?? (await ensurePlaybackDeviceId())
-  for (const uri of uris) {
-    await queueEpisode(uri, targetDeviceId)
+  const params = new URLSearchParams({
+    position_ms: String(Math.max(0, Math.floor(positionMs))),
+  })
+  await spotifyFetch(
+    withDeviceId(`/me/player/seek?${params.toString()}`, deviceId),
+    { method: 'PUT' },
+  )
+}
+
+/** Resume current playback (no body — does not replace the context). */
+export async function resumePlayback(deviceId: string): Promise<void> {
+  await spotifyFetch(withDeviceId('/me/player/play', deviceId), {
+    method: 'PUT',
+  })
+}
+
+/**
+ * Play a show context starting at a specific episode.
+ * Never pass episode URIs in `uris` — Spotify only accepts track URIs there.
+ */
+export async function playShowEpisode(
+  showUri: string,
+  episodeUri: string,
+  positionMs: number,
+  deviceId: string,
+): Promise<void> {
+  await spotifyFetch(withDeviceId('/me/player/play', deviceId), {
+    method: 'PUT',
+    body: JSON.stringify({
+      context_uri: showUri,
+      offset: { uri: episodeUri },
+      position_ms: positionMs,
+    }),
+  })
+}
+
+const POLL_INTERVAL_MS = 400
+const POLL_TIMEOUT_MS = 5_000
+
+export async function waitForCurrentItem(
+  uri: string,
+  timeoutMs = POLL_TIMEOUT_MS,
+): Promise<PlaybackState | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    const state = await fetchPlaybackState()
+    if (isCurrentUri(state, uri)) return state
+    await sleep(POLL_INTERVAL_MS)
   }
+  return null
+}
+
+async function settleAfterStart(
+  uri: string,
+  positionMs: number,
+  deviceId: string,
+): Promise<PlaybackState | null> {
+  const state = await waitForCurrentItem(uri)
+  if (!state) return null
+
+  if (shouldSeek(state.progress_ms, positionMs)) {
+    try {
+      await seekTo(positionMs, deviceId)
+    } catch {
+      // Resume position is best-effort.
+    }
+  }
+
+  if (state.is_playing === false) {
+    try {
+      await resumePlayback(deviceId)
+    } catch {
+      // May already be playing by the time we check.
+    }
+  }
+
+  return state
 }
 
 export type PlayRequest = {
@@ -286,38 +270,38 @@ export type PlayRequest = {
   positionMs: number
 }
 
-export type PlayThenQueueResult = {
-  method: 'connect' | 'deep_link'
-  queuedRemaining: boolean
-  remainingCount: number
+export type PlayOutcome = {
+  started: boolean
+  deviceName: string | null
+  queuedCount: number
+  queueFailed: boolean
 }
 
 /**
- * Prefer Connect when a device is already active (e.g. music playing).
- * Fall back to a top-level `spotify:` handoff if Connect does not start the episode.
+ * Start an episode on the active Connect device via queue→next (episodes are
+ * not supported in play `uris`). Fall back to show context + offset, then
+ * report started:false so the UI can offer a Spotify deep link.
  */
-export async function playThenQueue(
+export async function playEpisodes(
   episodes: PlayRequest[],
-): Promise<PlayThenQueueResult> {
+): Promise<PlayOutcome> {
   if (episodes.length === 0) {
     throw new Error('No episodes to play')
   }
 
   const [first, ...rest] = episodes
-  let method: PlayThenQueueResult['method'] = 'connect'
+  const { deviceId, deviceName } = await ensurePlaybackDeviceId()
 
+  let started = false
+  let verified: PlaybackState | null = null
+
+  // Strategy A: queue episode then skip to it (officially supports episode URIs).
   try {
-    const started = await playEpisodeViaConnect(
-      first.uri,
-      first.positionMs,
-      first.showUri,
-    )
-    if (!started) {
-      openInSpotifyApp(first.uri)
-      method = 'deep_link'
-    }
+    await queueItem(first.uri, deviceId)
+    await skipToNext(deviceId)
+    verified = await settleAfterStart(first.uri, first.positionMs, deviceId)
+    started = verified != null
   } catch (err) {
-    // Hard auth/premium failures should surface; otherwise try deep link.
     if (
       err instanceof SpotifyApiError &&
       err.status === 403 &&
@@ -325,28 +309,93 @@ export async function playThenQueue(
     ) {
       throw err
     }
-    openInSpotifyApp(first.uri)
-    method = 'deep_link'
+    // Fall through to strategy B.
+  }
+
+  // Strategy B: play show context with episode offset.
+  if (!started && first.showUri) {
+    try {
+      await playShowEpisode(
+        first.showUri,
+        first.uri,
+        first.positionMs,
+        deviceId,
+      )
+      verified = await settleAfterStart(first.uri, first.positionMs, deviceId)
+      started = verified != null
+    } catch (err) {
+      if (
+        err instanceof SpotifyApiError &&
+        err.status === 403 &&
+        /premium|restriction|restrict/i.test(err.message)
+      ) {
+        throw err
+      }
+    }
+  }
+
+  if (!started) {
+    return {
+      started: false,
+      deviceName,
+      queuedCount: 0,
+      queueFailed: rest.length > 0,
+    }
   }
 
   if (rest.length === 0) {
-    return { method, queuedRemaining: true, remainingCount: 0 }
-  }
-
-  if (method === 'deep_link') {
-    await sleep(2000)
+    return {
+      started: true,
+      deviceName: verified?.device?.name ?? deviceName,
+      queuedCount: 0,
+      queueFailed: false,
+    }
   }
 
   try {
-    const state = await fetchPlaybackState()
-    const deviceId = state?.device?.id ?? (await ensurePlaybackDeviceId())
     await queueEpisodes(
       rest.map((episode) => episode.uri),
-      deviceId ?? undefined,
+      deviceId,
     )
-    return { method, queuedRemaining: true, remainingCount: rest.length }
+    return {
+      started: true,
+      deviceName: verified?.device?.name ?? deviceName,
+      queuedCount: rest.length,
+      queueFailed: false,
+    }
   } catch {
-    return { method, queuedRemaining: false, remainingCount: rest.length }
+    return {
+      started: true,
+      deviceName: verified?.device?.name ?? deviceName,
+      queuedCount: rest.length,
+      queueFailed: true,
+    }
+  }
+}
+
+const QUEUE_GAP_MS = 150
+
+export async function queueEpisode(
+  uri: string,
+  deviceId?: string,
+): Promise<void> {
+  const targetDeviceId =
+    deviceId ?? (await ensurePlaybackDeviceId()).deviceId
+  await queueItem(uri, targetDeviceId)
+}
+
+export async function queueEpisodes(
+  uris: string[],
+  deviceId?: string,
+): Promise<void> {
+  if (uris.length === 0) return
+  const targetDeviceId =
+    deviceId ?? (await ensurePlaybackDeviceId()).deviceId
+  for (let i = 0; i < uris.length; i++) {
+    await queueItem(uris[i]!, targetDeviceId)
+    if (i < uris.length - 1) {
+      await sleep(QUEUE_GAP_MS)
+    }
   }
 }
 

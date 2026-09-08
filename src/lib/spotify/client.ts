@@ -130,7 +130,11 @@ export async function spotifyJson<T>(
   if (response.status === 204) {
     return undefined as T
   }
-  return (await response.json()) as T
+  const text = await response.text()
+  if (!text.trim()) {
+    return undefined as T
+  }
+  return JSON.parse(text) as T
 }
 
 /** Keep tokens in sync when AuthContext saves them externally */

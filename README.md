@@ -8,6 +8,8 @@ A React SPA that uses the Spotify Web API with Authorization Code + PKCE (no bac
 
 - Log in with Spotify (PKCE)
 - Load all saved podcast episodes from your library
+- Browse followed shows and open a show’s episode list
+- Highlight episodes not yet saved in your library (“new”) and save them in one click
 - Sort, filter, search, and paginate in a table
 - Distinguish unplayed, in-progress, and finished episodes (from Spotify resume point)
 - Filter by podcast and play status
@@ -75,7 +77,7 @@ Only the scopes needed for library episodes, resume position, and playback contr
 
 ## Stack
 
-React 19 · TypeScript · Vite · Chakra UI v3 · TanStack Table · Spotify Web API (PKCE)
+React 19 · TypeScript · Vite · Chakra UI v3 · TanStack Table · React Router · Spotify Web API (PKCE)
 
 ## Attribution
 

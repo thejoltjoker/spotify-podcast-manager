@@ -12,12 +12,14 @@ export type SpotifyShow = {
   id: string
   name: string
   publisher: string
+  description?: string
+  total_episodes?: number
   images: SpotifyImage[]
   external_urls: { spotify: string }
   uri?: string
 }
 
-export type SpotifyEpisode = {
+export type SpotifySimplifiedEpisode = {
   id: string
   uri: string
   name: string
@@ -32,6 +34,9 @@ export type SpotifyEpisode = {
     fully_played: boolean
     resume_position_ms: number
   }
+}
+
+export type SpotifyEpisode = SpotifySimplifiedEpisode & {
   show: SpotifyShow
 }
 
@@ -77,6 +82,8 @@ export type SpotifyUser = {
   id: string
   display_name: string | null
   images: SpotifyImage[]
+  /** "premium" | "free" | "open" — only present with user-read-private; often absent */
+  product?: string
 }
 
 export type EpisodeRow = {
@@ -89,6 +96,47 @@ export type EpisodeRow = {
   durationMs: number
   playStatus: PlayStatus
   resumePositionMs: number
+  imageUrl: string | null
+  spotifyUrl: string
+  addedAt: string
+}
+
+export type ShowEpisodeRow = EpisodeRow & {
+  savedInLibrary: boolean
+}
+
+export type SavedShowItem = {
+  added_at: string
+  show: SpotifyShow
+}
+
+export type PaginatedSavedShows = {
+  href: string
+  limit: number
+  next: string | null
+  offset: number
+  previous: string | null
+  total: number
+  items: SavedShowItem[]
+}
+
+export type PaginatedSimplifiedEpisodes = {
+  href: string
+  limit: number
+  next: string | null
+  offset: number
+  previous: string | null
+  total: number
+  items: SpotifySimplifiedEpisode[]
+}
+
+export type ShowRow = {
+  id: string
+  uri: string
+  name: string
+  publisher: string
+  description: string | null
+  totalEpisodes: number | null
   imageUrl: string | null
   spotifyUrl: string
   addedAt: string
