@@ -155,7 +155,13 @@ export function AppShell() {
         </VStack>
       </Box>
 
-      <Box flex="1" minW="0" overflow="auto">
+      <Box
+        flex="1"
+        minW="0"
+        overflow="auto"
+        display="flex"
+        flexDirection="column"
+      >
         <Outlet />
       </Box>
     </HStack>

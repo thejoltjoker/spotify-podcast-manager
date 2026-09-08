@@ -1,7 +1,8 @@
 import { useCallback, useState } from 'react'
-import { Box, Button, Container, Heading, HStack, Text, VStack } from '@chakra-ui/react'
+import { Box, Button, Text } from '@chakra-ui/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EpisodeTable } from '@/components/EpisodeTable'
+import { ListInfoBar } from '@/components/ListChrome'
 import { toaster } from '@/components/ui/toaster'
 import {
   fetchAllSavedEpisodes,
@@ -149,46 +150,47 @@ export function SavedEpisodesPage() {
     }
   }, [])
 
-  return (
-    <Box py="6">
-      <Container maxW="7xl">
-        <VStack align="stretch" gap="6">
-          <HStack justify="space-between" align="start" flexWrap="wrap" gap="3">
-            <VStack align="start" gap="1">
-              <Heading size="xl">Saved podcast episodes</Heading>
-              <Text fontSize="sm" color="fg.muted">
-                Content from Spotify
-              </Text>
-            </VStack>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void refetch()}
-              loading={isFetching && !isPending}
-              disabled={isPending}
-            >
-              Refresh
-            </Button>
-          </HStack>
+  const refreshButton = (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => void refetch()}
+      loading={isFetching && !isPending}
+      disabled={isPending}
+    >
+      Refresh
+    </Button>
+  )
 
-          {error ? (
-            <Text color="fg.error">
-              {formatSpotifyError(error, 'Failed to load episodes')}
-            </Text>
-          ) : (
-            <EpisodeTable
-              data={episodes}
-              loading={isPending}
-              onRemove={handleRemove}
-              onPlay={handlePlay}
-              onQueue={handleQueue}
-              removing={removeMutation.isPending}
-              playbackBusy={playbackBusy}
-              playbackAllowed={isPremium}
-            />
-          )}
-        </VStack>
-      </Container>
+  return (
+    <Box flex="1" bg="bg.muted" px={{ base: '4', md: '6' }} py={{ base: '4', md: '6' }}>
+      {error ? (
+        <>
+          <ListInfoBar
+            title="Saved podcast episodes"
+            description="Content from Spotify"
+          >
+            {refreshButton}
+          </ListInfoBar>
+          <Text color="fg.error" mt="4">
+            {formatSpotifyError(error, 'Failed to load episodes')}
+          </Text>
+        </>
+      ) : (
+        <EpisodeTable
+          title="Saved podcast episodes"
+          description="Content from Spotify"
+          headerActions={refreshButton}
+          data={episodes}
+          loading={isPending}
+          onRemove={handleRemove}
+          onPlay={handlePlay}
+          onQueue={handleQueue}
+          removing={removeMutation.isPending}
+          playbackBusy={playbackBusy}
+          playbackAllowed={isPremium}
+        />
+      )}
     </Box>
   )
 }

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   ActionBar,
   Badge,
   Box,
   Button,
   ButtonGroup,
+  Card,
   Checkbox,
   CloseButton,
   Combobox,
@@ -13,8 +14,10 @@ import {
   IconButton,
   Image,
   Input,
+  InputGroup,
   Link,
   Menu,
+  NativeSelect,
   Pagination,
   Portal,
   Spinner,
@@ -43,6 +46,7 @@ import {
   LuExternalLink,
   LuListPlus,
   LuPlay,
+  LuSearch,
   LuTrash2,
 } from "react-icons/lu";
 import { formatDuration, formatTotalDuration } from "@/lib/format";
@@ -53,6 +57,11 @@ import {
   type PlayStatus,
 } from "@/lib/spotify/playStatus";
 import type { EpisodeRow } from "@/lib/spotify/types";
+import {
+  ListFilterBar,
+  ListInfoBar,
+  ListStatCards,
+} from "@/components/ListChrome";
 import { Tooltip } from "@/components/ui/tooltip";
 
 const PREMIUM_HINT = "Requires Spotify Premium";
@@ -69,11 +78,16 @@ const PLAY_STATUS_COLORS: Record<PlayStatus, string> = {
   finished: "green",
 };
 
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
+
 const columnHelper = createColumnHelper<EpisodeRow>();
 
 type EpisodeTableProps = {
   data: EpisodeRow[];
   loading: boolean;
+  title: string;
+  description?: string;
+  headerActions?: ReactNode;
   onRemove: (rows: EpisodeRow[]) => Promise<void>;
   onPlay: (rows: EpisodeRow[]) => Promise<void>;
   onQueue: (rows: EpisodeRow[]) => Promise<void>;
@@ -104,6 +118,9 @@ function confirmCopy(rows: EpisodeRow[]): {
 export function EpisodeTable({
   data,
   loading,
+  title,
+  description,
+  headerActions,
   onRemove,
   onPlay,
   onQueue,
@@ -478,6 +495,10 @@ export function EpisodeTable({
     (sum, row) => sum + row.original.durationMs,
     0
   );
+  const statusCounts = { unplayed: 0, in_progress: 0, finished: 0 };
+  for (const row of filteredRows) {
+    statusCounts[row.original.playStatus] += 1;
+  }
 
   async function handleConfirm() {
     if (!confirmRows) return;
@@ -493,152 +514,189 @@ export function EpisodeTable({
   }
 
   const dialog = confirmRows ? confirmCopy(confirmRows) : null;
-
-  if (loading) {
-    return (
-      <VStack py="16" gap="3">
-        <Spinner size="lg" />
-        <Text color="fg.muted">Loading saved episodes…</Text>
-      </VStack>
-    );
-  }
+  const hasActiveFilters =
+    globalFilter.trim().length > 0 ||
+    selectedShows.length > 0 ||
+    selectedStatuses.length > 0;
+  const pageSize = table.getState().pagination.pageSize;
+  const stats = [
+    {
+      label: "Episodes",
+      value: String(filteredRows.length),
+      hint:
+        filteredRows.length === data.length
+          ? "In your library"
+          : `of ${data.length} saved`,
+    },
+    {
+      label: "Total time",
+      value: formatTotalDuration(filteredDurationMs),
+      hint: hasActiveFilters ? "Matching filters" : "All saved episodes",
+    },
+    {
+      label: PLAY_STATUS_LABELS.unplayed,
+      value: String(statusCounts.unplayed),
+      hint: "Ready to play",
+    },
+    {
+      label: PLAY_STATUS_LABELS.in_progress,
+      value: String(statusCounts.in_progress),
+      hint: "Picked up mid-episode",
+    },
+  ];
 
   return (
     <VStack align="stretch" gap="4">
-      <HStack gap="3" w="full">
-        <Input
-          flex="1"
-          minW="2xs"
-          placeholder="Filter episodes…"
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-        />
-        <Combobox.Root
-          multiple
-          closeOnSelect={false}
-          flex="1"
-          minW="2xs"
-          width="full"
-          openOnClick
-          collection={collection}
-          value={selectedShows}
-          onValueChange={(details) => setSelectedShows(details.value)}
-          onInputValueChange={(details) => filter(details.inputValue)}
-          placeholder="Filter by podcast…"
-        >
-          <Combobox.Control>
-            <Combobox.Input />
-            <Combobox.IndicatorGroup>
-              <Combobox.ClearTrigger />
-              <Combobox.Trigger />
-            </Combobox.IndicatorGroup>
-          </Combobox.Control>
-          <Portal>
-            <Combobox.Positioner>
-              <Combobox.Content>
-                <Combobox.Empty>No podcasts found</Combobox.Empty>
-                {collection.items.map((item) => (
-                  <Combobox.Item key={item.value} item={item}>
-                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                    <Combobox.ItemIndicator />
-                  </Combobox.Item>
-                ))}
-              </Combobox.Content>
-            </Combobox.Positioner>
-          </Portal>
-        </Combobox.Root>
-        <Combobox.Root
-          multiple
-          closeOnSelect={false}
-          flex="1"
-          minW="2xs"
-          width="full"
-          openOnClick
-          collection={statusCollection}
-          value={selectedStatuses}
-          onValueChange={(details) =>
-            setSelectedStatuses(details.value as PlayStatus[])
-          }
-          placeholder="Filter by status…"
-        >
-          <Combobox.Control>
-            <Combobox.Input />
-            <Combobox.IndicatorGroup>
-              <Combobox.ClearTrigger />
-              <Combobox.Trigger />
-            </Combobox.IndicatorGroup>
-          </Combobox.Control>
-          <Portal>
-            <Combobox.Positioner>
-              <Combobox.Content>
-                {statusCollection.items.map((item) => (
-                  <Combobox.Item key={item.value} item={item}>
-                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                    <Combobox.ItemIndicator />
-                  </Combobox.Item>
-                ))}
-              </Combobox.Content>
-            </Combobox.Positioner>
-          </Portal>
-        </Combobox.Root>
-      </HStack>
-      <Text
-        fontSize="sm"
-        color="fg.muted"
-        whiteSpace="nowrap"
-        alignSelf="flex-end"
-      >
-        {filteredRows.length} of {data.length} episodes ·{" "}
-        {formatTotalDuration(filteredDurationMs)} total
-      </Text>
-      {selectedShows.length > 0 || selectedStatuses.length > 0 ? (
-        <HStack gap="2" flexWrap="wrap">
-          {selectedShows.map((show) => (
-            <Badge
-              key={show}
-              size="sm"
-              colorPalette="green"
-              variant="subtle"
-              cursor="pointer"
-              onClick={() =>
-                setSelectedShows((prev) => prev.filter((s) => s !== show))
-              }
-              title="Remove filter"
+      <ListInfoBar title={title} description={description}>
+        {headerActions}
+      </ListInfoBar>
+      {loading ? null : (
+        <ListFilterBar>
+          <HStack gap="3" w="full" flexWrap="wrap">
+            <InputGroup
+              startElement={<LuSearch />}
+              flex="1"
+              minW="200px"
+              maxW="sm"
             >
-              {show} ×
-            </Badge>
-          ))}
-          {selectedStatuses.map((status) => (
-            <Badge
-              key={status}
+              <Input
+                size="sm"
+                type="search"
+                aria-label="Filter episodes"
+                placeholder="Filter episodes…"
+                value={globalFilter}
+                onChange={(e) => setGlobalFilter(e.target.value)}
+              />
+            </InputGroup>
+            <Combobox.Root
+              multiple
+              closeOnSelect={false}
+              minW="200px"
+              width="240px"
               size="sm"
-              colorPalette={PLAY_STATUS_COLORS[status]}
-              variant="subtle"
-              cursor="pointer"
-              onClick={() =>
-                setSelectedStatuses((prev) => prev.filter((s) => s !== status))
-              }
-              title="Remove filter"
+              openOnClick
+              collection={collection}
+              value={selectedShows}
+              onValueChange={(details) => setSelectedShows(details.value)}
+              onInputValueChange={(details) => filter(details.inputValue)}
+              placeholder="Filter by podcast…"
             >
-              {PLAY_STATUS_LABELS[status]} ×
-            </Badge>
-          ))}
-        </HStack>
-      ) : null}
+              <Combobox.Control>
+                <Combobox.Input aria-label="Filter by podcast" />
+                <Combobox.IndicatorGroup>
+                  <Combobox.ClearTrigger />
+                  <Combobox.Trigger />
+                </Combobox.IndicatorGroup>
+              </Combobox.Control>
+              <Portal>
+                <Combobox.Positioner>
+                  <Combobox.Content>
+                    <Combobox.Empty>No podcasts found</Combobox.Empty>
+                    {collection.items.map((item) => (
+                      <Combobox.Item key={item.value} item={item}>
+                        <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                        <Combobox.ItemIndicator />
+                      </Combobox.Item>
+                    ))}
+                  </Combobox.Content>
+                </Combobox.Positioner>
+              </Portal>
+            </Combobox.Root>
+            <Combobox.Root
+              multiple
+              closeOnSelect={false}
+              minW="200px"
+              width="240px"
+              size="sm"
+              openOnClick
+              collection={statusCollection}
+              value={selectedStatuses}
+              onValueChange={(details) =>
+                setSelectedStatuses(details.value as PlayStatus[])
+              }
+              placeholder="Filter by status…"
+            >
+              <Combobox.Control>
+                <Combobox.Input aria-label="Filter by status" />
+                <Combobox.IndicatorGroup>
+                  <Combobox.ClearTrigger />
+                  <Combobox.Trigger />
+                </Combobox.IndicatorGroup>
+              </Combobox.Control>
+              <Portal>
+                <Combobox.Positioner>
+                  <Combobox.Content>
+                    {statusCollection.items.map((item) => (
+                      <Combobox.Item key={item.value} item={item}>
+                        <Combobox.ItemText>{item.label}</Combobox.ItemText>
+                        <Combobox.ItemIndicator />
+                      </Combobox.Item>
+                    ))}
+                  </Combobox.Content>
+                </Combobox.Positioner>
+              </Portal>
+            </Combobox.Root>
+          </HStack>
+          {hasActiveFilters ? (
+            <HStack gap="2" flexWrap="wrap" mt="3">
+              {selectedShows.map((show) => (
+                <Badge
+                  key={show}
+                  size="sm"
+                  colorPalette="green"
+                  variant="subtle"
+                  cursor="pointer"
+                  onClick={() =>
+                    setSelectedShows((prev) => prev.filter((s) => s !== show))
+                  }
+                  title="Remove filter"
+                >
+                  {show} ×
+                </Badge>
+              ))}
+              {selectedStatuses.map((status) => (
+                <Badge
+                  key={status}
+                  size="sm"
+                  colorPalette={PLAY_STATUS_COLORS[status]}
+                  variant="subtle"
+                  cursor="pointer"
+                  onClick={() =>
+                    setSelectedStatuses((prev) =>
+                      prev.filter((s) => s !== status)
+                    )
+                  }
+                  title="Remove filter"
+                >
+                  {PLAY_STATUS_LABELS[status]} ×
+                </Badge>
+              ))}
+            </HStack>
+          ) : null}
+        </ListFilterBar>
+      )}
+      {loading ? null : <ListStatCards items={stats} />}
 
-      {data.length === 0 ? (
-        <Box py="12" textAlign="center">
-          <Text color="fg.muted">
-            No saved podcast episodes in your library.
-          </Text>
-        </Box>
+      {loading ? (
+        <VStack py="16" gap="3">
+          <Spinner size="lg" />
+          <Text color="fg.muted">Loading saved episodes…</Text>
+        </VStack>
+      ) : data.length === 0 ? (
+        <Card.Root variant="outline">
+          <Card.Body py="12" textAlign="center">
+            <Text color="fg.muted">
+              No saved podcast episodes in your library.
+            </Text>
+          </Card.Body>
+        </Card.Root>
       ) : (
-        <>
-          <Table.ScrollArea borderWidth="1px" rounded="md">
+        <Card.Root variant="outline" overflow="hidden">
+          <Table.ScrollArea>
             <Table.Root size="sm" stickyHeader>
               <Table.Header>
                 {table.getHeaderGroups().map((headerGroup) => (
-                  <Table.Row key={headerGroup.id}>
+                  <Table.Row key={headerGroup.id} bg="bg.subtle">
                     {headerGroup.headers.map((header) => {
                       const canSort = header.column.getCanSort();
                       return (
@@ -678,6 +736,10 @@ export function EpisodeTable({
                   <Table.Row
                     key={row.id}
                     data-selected={row.getIsSelected() || undefined}
+                    _selected={{
+                      bg: "orange.subtle",
+                      boxShadow: "inset 3px 0 0 {colors.orange.solid}",
+                    }}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <Table.Cell key={cell.id}>
@@ -693,10 +755,38 @@ export function EpisodeTable({
             </Table.Root>
           </Table.ScrollArea>
 
-          <HStack justify="flex-end">
+          <HStack
+            justify="space-between"
+            flexWrap="wrap"
+            gap="3"
+            px="4"
+            py="3"
+            borderTopWidth="1px"
+          >
+            <HStack gap="2">
+              <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
+                Per page
+              </Text>
+              <NativeSelect.Root size="sm" width="20">
+                <NativeSelect.Field
+                  aria-label="Rows per page"
+                  value={String(pageSize)}
+                  onChange={(e) => {
+                    table.setPageSize(Number(e.target.value));
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </HStack>
             <Pagination.Root
               count={filteredRows.length}
-              pageSize={table.getState().pagination.pageSize}
+              pageSize={pageSize}
               page={pageIndex + 1}
               onPageChange={(details) => {
                 table.setPageIndex(details.page - 1);
@@ -727,7 +817,7 @@ export function EpisodeTable({
               </ButtonGroup>
             </Pagination.Root>
           </HStack>
-        </>
+        </Card.Root>
       )}
 
       <ActionBar.Root
