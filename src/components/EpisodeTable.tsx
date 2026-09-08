@@ -37,7 +37,6 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import {
-  LuCheckCheck,
   LuChevronLeft,
   LuChevronRight,
   LuEllipsisVertical,
@@ -72,18 +71,10 @@ const PLAY_STATUS_COLORS: Record<PlayStatus, string> = {
 
 const columnHelper = createColumnHelper<EpisodeRow>();
 
-type ConfirmKind = "remove" | "markPlayedAndRemove";
-
-type ConfirmAction = {
-  kind: ConfirmKind;
-  rows: EpisodeRow[];
-};
-
 type EpisodeTableProps = {
   data: EpisodeRow[];
   loading: boolean;
   onRemove: (rows: EpisodeRow[]) => Promise<void>;
-  onMarkPlayedAndRemove: (rows: EpisodeRow[]) => Promise<void>;
   onPlay: (rows: EpisodeRow[]) => Promise<void>;
   onQueue: (rows: EpisodeRow[]) => Promise<void>;
   removing: boolean;
@@ -92,26 +83,13 @@ type EpisodeTableProps = {
   playbackAllowed?: boolean;
 };
 
-function confirmCopy(action: ConfirmAction): {
+function confirmCopy(rows: EpisodeRow[]): {
   title: string;
   description: string;
   confirmLabel: string;
-  colorPalette: "red" | "green";
 } {
-  const count = action.rows.length;
-  const singleName = action.rows[0]?.name;
-
-  if (action.kind === "markPlayedAndRemove") {
-    return {
-      title: "Mark as played and remove?",
-      description:
-        count === 1
-          ? `Mark “${singleName}” as played and remove it from your Spotify library?`
-          : `Mark ${count} episodes as played and remove them from your Spotify library?`,
-      confirmLabel: "Mark played & remove",
-      colorPalette: "green",
-    };
-  }
+  const count = rows.length;
+  const singleName = rows[0]?.name;
 
   return {
     title: "Remove from library?",
@@ -120,7 +98,6 @@ function confirmCopy(action: ConfirmAction): {
         ? `Remove “${singleName}” from your Spotify library?`
         : `Remove ${count} episodes from your Spotify library?`,
     confirmLabel: "Remove",
-    colorPalette: "red",
   };
 }
 
@@ -128,7 +105,6 @@ export function EpisodeTable({
   data,
   loading,
   onRemove,
-  onMarkPlayedAndRemove,
   onPlay,
   onQueue,
   removing,
@@ -145,17 +121,12 @@ export function EpisodeTable({
   const [selectedShows, setSelectedShows] = useState<string[]>([]);
   const [selectedStatuses, setSelectedStatuses] = useState<PlayStatus[]>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
-    null
-  );
+  const [confirmRows, setConfirmRows] = useState<EpisodeRow[] | null>(null);
 
-  const requestConfirm = useCallback(
-    (kind: ConfirmKind, rows: EpisodeRow[]) => {
-      if (rows.length === 0) return;
-      setConfirmAction({ kind, rows });
-    },
-    []
-  );
+  const requestConfirm = useCallback((rows: EpisodeRow[]) => {
+    if (rows.length === 0) return;
+    setConfirmRows(rows);
+  }, []);
 
   const showItems = useMemo(() => {
     const names = [...new Set(data.map((row) => row.showName).filter(Boolean))];
@@ -396,24 +367,11 @@ export function EpisodeTable({
                 <IconButton
                   size="sm"
                   variant="ghost"
-                  colorPalette="green"
-                  aria-label={`Mark “${episode.name}” as played and remove`}
-                  title="Mark as played and remove"
-                  disabled={actionsDisabled}
-                  onClick={() =>
-                    requestConfirm("markPlayedAndRemove", [episode])
-                  }
-                >
-                  <LuCheckCheck />
-                </IconButton>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
                   colorPalette="red"
                   aria-label={`Remove ${episode.name}`}
                   title="Remove from library"
                   disabled={actionsDisabled}
-                  onClick={() => requestConfirm("remove", [episode])}
+                  onClick={() => requestConfirm([episode])}
                 >
                   <LuTrash2 />
                 </IconButton>
@@ -463,23 +421,10 @@ export function EpisodeTable({
                         </Menu.Item>
                         <Menu.Separator />
                         <Menu.Item
-                          value="markPlayedAndRemove"
-                          color="fg.success"
-                          disabled={actionsDisabled}
-                          onSelect={() =>
-                            requestConfirm("markPlayedAndRemove", [episode])
-                          }
-                        >
-                          <LuCheckCheck />
-                          Mark played & remove
-                        </Menu.Item>
-                        <Menu.Item
                           value="remove"
                           color="fg.error"
                           disabled={actionsDisabled}
-                          onSelect={() =>
-                            requestConfirm("remove", [episode])
-                          }
+                          onSelect={() => requestConfirm([episode])}
                         >
                           <LuTrash2 />
                           Remove from library
@@ -535,14 +480,10 @@ export function EpisodeTable({
   );
 
   async function handleConfirm() {
-    if (!confirmAction) return;
-    const { kind, rows } = confirmAction;
-    if (kind === "markPlayedAndRemove") {
-      await onMarkPlayedAndRemove(rows);
-    } else {
-      await onRemove(rows);
-    }
-    setConfirmAction(null);
+    if (!confirmRows) return;
+    const rows = confirmRows;
+    await onRemove(rows);
+    setConfirmRows(null);
     const removedIds = new Set(rows.map((row) => row.id));
     setRowSelection((prev) => {
       const next = { ...prev };
@@ -551,7 +492,7 @@ export function EpisodeTable({
     });
   }
 
-  const dialog = confirmAction ? confirmCopy(confirmAction) : null;
+  const dialog = confirmRows ? confirmCopy(confirmRows) : null;
 
   if (loading) {
     return (
@@ -831,22 +772,10 @@ export function EpisodeTable({
               </Tooltip>
               <Button
                 size="sm"
-                colorPalette="green"
-                variant="outline"
-                disabled={actionsDisabled}
-                onClick={() =>
-                  requestConfirm("markPlayedAndRemove", selectedRows)
-                }
-              >
-                <LuCheckCheck />
-                Mark played & remove
-              </Button>
-              <Button
-                size="sm"
                 colorPalette="red"
                 variant="outline"
                 disabled={actionsDisabled}
-                onClick={() => requestConfirm("remove", selectedRows)}
+                onClick={() => requestConfirm(selectedRows)}
               >
                 <LuTrash2 />
                 Remove
@@ -864,9 +793,9 @@ export function EpisodeTable({
         placement="center"
         size="sm"
         lazyMount
-        open={confirmAction !== null}
+        open={confirmRows !== null}
         onOpenChange={(details) => {
-          if (!details.open) setConfirmAction(null);
+          if (!details.open) setConfirmRows(null);
         }}
       >
         <Portal>
@@ -886,7 +815,7 @@ export function EpisodeTable({
                   </Button>
                 </Dialog.ActionTrigger>
                 <Button
-                  colorPalette={dialog?.colorPalette ?? "red"}
+                  colorPalette="red"
                   loading={removing}
                   disabled={actionsDisabled}
                   onClick={() => void handleConfirm()}

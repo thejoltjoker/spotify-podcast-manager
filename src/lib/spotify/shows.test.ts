@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { isNewShowEpisode, toShowEpisodeRow, toShowRow } from './shows'
+import {
+  filterPodcastShows,
+  isNewShowEpisode,
+  showEpisodesFromEmbedded,
+  toShowEpisodeRow,
+  toShowRow,
+  withSavedInLibrary,
+} from './shows'
 import type { SpotifyShow, SpotifySimplifiedEpisode } from './types'
 
 const show: SpotifyShow = {
@@ -52,7 +59,7 @@ describe('isNewShowEpisode', () => {
 })
 
 describe('toShowRow', () => {
-  it('maps show fields including total episodes', () => {
+  it('maps show fields', () => {
     const row = toShowRow(show, '2026-01-01T00:00:00Z')
     expect(row).toMatchObject({
       id: 'show1',
@@ -63,6 +70,84 @@ describe('toShowRow', () => {
       uri: 'spotify:show:show1',
     })
     expect(row.imageUrl).toBe('https://example.com/show.jpg')
+  })
+})
+
+describe('withSavedInLibrary', () => {
+  it('marks rows whose id is in the saved set', () => {
+    const rows = [
+      toShowEpisodeRow(episode({ id: 'a', uri: 'spotify:episode:a' }), show),
+      toShowEpisodeRow(episode({ id: 'b', uri: 'spotify:episode:b' }), show),
+    ]
+    const marked = withSavedInLibrary(rows, new Set(['b']))
+    expect(marked.map((row) => row.savedInLibrary)).toEqual([false, true])
+  })
+})
+
+describe('showEpisodesFromEmbedded', () => {
+  it('returns null when the show has no embedded episodes', () => {
+    expect(showEpisodesFromEmbedded(show)).toBeNull()
+  })
+
+  it('builds a page from embedded episodes without a network call', () => {
+    const page = showEpisodesFromEmbedded({
+      ...show,
+      episodes: {
+        href: '',
+        limit: 20,
+        next: 'https://api.spotify.com/v1/shows/show1/episodes?offset=20',
+        offset: 0,
+        previous: null,
+        total: 40,
+        items: [episode()],
+      },
+    })
+    expect(page).toMatchObject({
+      total: 40,
+      hasMore: true,
+      nextOffset: 1,
+    })
+    expect(page?.rows).toHaveLength(1)
+    expect(page?.rows[0]?.id).toBe('ep1')
+  })
+})
+
+describe('filterPodcastShows', () => {
+  it('omits shows whose id is in the audiobook set', () => {
+    const rows = filterPodcastShows(
+      [
+        { added_at: '2026-01-01T00:00:00Z', show },
+        {
+          added_at: '2026-01-02T00:00:00Z',
+          show: {
+            ...show,
+            id: 'book1',
+            name: 'An Audiobook',
+            uri: 'spotify:show:book1',
+          },
+        },
+      ],
+      new Set(['book1']),
+    )
+    expect(rows.map((row) => row.id)).toEqual(['show1'])
+  })
+
+  it('omits entries flagged as audiobook via type or media_type', () => {
+    const rows = filterPodcastShows(
+      [
+        {
+          added_at: '2026-01-01T00:00:00Z',
+          show: { ...show, id: 'a', type: 'audiobook' },
+        },
+        {
+          added_at: '2026-01-01T00:00:00Z',
+          show: { ...show, id: 'b', media_type: 'audiobook' },
+        },
+        { added_at: '2026-01-01T00:00:00Z', show },
+      ],
+      new Set(),
+    )
+    expect(rows.map((row) => row.id)).toEqual(['show1'])
   })
 })
 

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Box, Button, Container, Heading, HStack, Text, VStack } from '@chakra-ui/react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { EpisodeTable } from '@/components/EpisodeTable'
 import { toaster } from '@/components/ui/toaster'
 import {
@@ -7,6 +8,8 @@ import {
   removeEpisodesFromLibrary,
 } from '@/lib/spotify/episodes'
 import { useAuth } from '@/auth/AuthContext'
+import { queryKeys } from '@/lib/query'
+import { formatSpotifyError } from '@/lib/spotify/errors'
 import {
   formatPlaybackError,
   playbackPositionMs,
@@ -17,74 +20,50 @@ import type { EpisodeRow } from '@/lib/spotify/types'
 
 export function SavedEpisodesPage() {
   const { isPremium } = useAuth()
-  const [episodes, setEpisodes] = useState<EpisodeRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [removing, setRemoving] = useState(false)
+  const queryClient = useQueryClient()
   const [playbackBusy, setPlaybackBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const loadEpisodes = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const rows = await fetchAllSavedEpisodes()
-      setEpisodes(rows)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load episodes')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const {
+    data: episodes = [],
+    isPending,
+    error,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: queryKeys.savedEpisodes,
+    queryFn: fetchAllSavedEpisodes,
+  })
 
-  useEffect(() => {
-    void loadEpisodes()
-  }, [loadEpisodes])
-
-  const removeRows = useCallback(
-    async (
-      rows: EpisodeRow[],
-      messages: { success: string; errorTitle: string },
-    ) => {
-      setRemoving(true)
-      try {
-        await removeEpisodesFromLibrary(rows.map((r) => r.uri))
-        const removedIds = new Set(rows.map((r) => r.id))
-        setEpisodes((prev) => prev.filter((e) => !removedIds.has(e.id)))
-        toaster.create({
-          title: messages.success,
-          type: 'success',
-        })
-      } catch (err) {
-        toaster.create({
-          title: messages.errorTitle,
-          description: err instanceof Error ? err.message : 'Unknown error',
-          type: 'error',
-        })
-      } finally {
-        setRemoving(false)
-      }
+  const removeMutation = useMutation({
+    mutationFn: async (rows: EpisodeRow[]) => {
+      await removeEpisodesFromLibrary(rows.map((r) => r.uri))
+      return rows
     },
-    [],
-  )
+    onSuccess: (rows) => {
+      const removedIds = new Set(rows.map((r) => r.id))
+      queryClient.setQueryData<EpisodeRow[]>(queryKeys.savedEpisodes, (prev) =>
+        (prev ?? []).filter((e) => !removedIds.has(e.id)),
+      )
+      void queryClient.invalidateQueries({ queryKey: ['showEpisodes'] })
+      toaster.create({
+        title: `Removed ${rows.length} episode${rows.length === 1 ? '' : 's'}`,
+        type: 'success',
+      })
+    },
+    onError: (err) => {
+      toaster.create({
+        title: 'Remove failed',
+        description: formatSpotifyError(err),
+        type: 'error',
+      })
+    },
+  })
 
   const handleRemove = useCallback(
     async (rows: EpisodeRow[]) => {
-      await removeRows(rows, {
-        success: `Removed ${rows.length} episode${rows.length === 1 ? '' : 's'}`,
-        errorTitle: 'Remove failed',
-      })
+      await removeMutation.mutateAsync(rows)
     },
-    [removeRows],
-  )
-
-  const handleMarkPlayedAndRemove = useCallback(
-    async (rows: EpisodeRow[]) => {
-      await removeRows(rows, {
-        success: `Marked ${rows.length} episode${rows.length === 1 ? '' : 's'} as played and removed`,
-        errorTitle: 'Mark played & remove failed',
-      })
-    },
-    [removeRows],
+    [removeMutation],
   )
 
   const handlePlay = useCallback(async (rows: EpisodeRow[]) => {
@@ -181,22 +160,29 @@ export function SavedEpisodesPage() {
                 Content from Spotify
               </Text>
             </VStack>
-            <Button size="sm" variant="outline" onClick={() => void loadEpisodes()}>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => void refetch()}
+              loading={isFetching && !isPending}
+              disabled={isPending}
+            >
               Refresh
             </Button>
           </HStack>
 
           {error ? (
-            <Text color="fg.error">{error}</Text>
+            <Text color="fg.error">
+              {formatSpotifyError(error, 'Failed to load episodes')}
+            </Text>
           ) : (
             <EpisodeTable
               data={episodes}
-              loading={loading}
+              loading={isPending}
               onRemove={handleRemove}
-              onMarkPlayedAndRemove={handleMarkPlayedAndRemove}
               onPlay={handlePlay}
               onQueue={handleQueue}
-              removing={removing}
+              removing={removeMutation.isPending}
               playbackBusy={playbackBusy}
               playbackAllowed={isPremium}
             />

@@ -17,6 +17,10 @@ export type SpotifyShow = {
   images: SpotifyImage[]
   external_urls: { spotify: string }
   uri?: string
+  type?: string
+  media_type?: string
+  /** Present on GET /shows/{id}; first page of episodes. */
+  episodes?: PaginatedSimplifiedEpisodes
 }
 
 export type SpotifySimplifiedEpisode = {
@@ -59,6 +63,8 @@ export type SpotifyErrorBody = {
   error: {
     status: number
     message: string
+    /** e.g. "QUOTA_EXCEEDED" on development-mode 429s */
+    reason?: string
   }
 }
 
@@ -140,4 +146,20 @@ export type ShowRow = {
   imageUrl: string | null
   spotifyUrl: string
   addedAt: string
+}
+
+export type SimplifiedAudiobook = {
+  id: string
+  type?: string
+  name?: string
+}
+
+export type PaginatedSimplifiedAudiobooks = {
+  href: string
+  limit: number
+  next: string | null
+  offset: number
+  previous: string | null
+  total: number
+  items: SimplifiedAudiobook[]
 }

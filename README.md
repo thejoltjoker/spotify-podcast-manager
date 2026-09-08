@@ -77,7 +77,7 @@ Only the scopes needed for library episodes, resume position, and playback contr
 
 ## Stack
 
-React 19 · TypeScript · Vite · Chakra UI v3 · TanStack Table · React Router · Spotify Web API (PKCE)
+React 19 · TypeScript · Vite · Chakra UI v3 · TanStack Table · TanStack Query · React Router · Spotify Web API (PKCE)
 
 ## Attribution
 

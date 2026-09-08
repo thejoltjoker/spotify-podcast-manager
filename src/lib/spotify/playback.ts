@@ -1,4 +1,10 @@
-import { SpotifyApiError, spotifyFetch, spotifyJson } from './client'
+import {
+  QUOTA_EXCEEDED,
+  SpotifyApiError,
+  spotifyFetch,
+  spotifyJson,
+} from './client'
+import { QUOTA_EXCEEDED_MESSAGE } from './errors'
 import type { PlayStatus } from './playStatus'
 
 export type SpotifyDevice = {
@@ -220,18 +226,24 @@ export async function playShowEpisode(
   })
 }
 
-const POLL_INTERVAL_MS = 400
-const POLL_TIMEOUT_MS = 5_000
+const POLL_INTERVALS_MS = [400, 800, 1600] as const
+const POLL_TIMEOUT_MS = 3_000
 
 export async function waitForCurrentItem(
   uri: string,
   timeoutMs = POLL_TIMEOUT_MS,
 ): Promise<PlaybackState | null> {
   const deadline = Date.now() + timeoutMs
+  let attempt = 0
   while (Date.now() < deadline) {
     const state = await fetchPlaybackState()
     if (isCurrentUri(state, uri)) return state
-    await sleep(POLL_INTERVAL_MS)
+    const interval =
+      POLL_INTERVALS_MS[Math.min(attempt, POLL_INTERVALS_MS.length - 1)]!
+    attempt += 1
+    const remaining = deadline - Date.now()
+    if (remaining <= 0) break
+    await sleep(Math.min(interval, remaining))
   }
   return null
 }
@@ -402,6 +414,10 @@ export async function queueEpisodes(
 export function formatPlaybackError(err: unknown): string {
   if (!(err instanceof SpotifyApiError)) {
     return err instanceof Error ? err.message : 'Playback failed'
+  }
+
+  if (err.reason === QUOTA_EXCEEDED) {
+    return QUOTA_EXCEEDED_MESSAGE
   }
 
   const message = err.message.toLowerCase()

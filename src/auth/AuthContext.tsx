@@ -7,6 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { setTokenChangeListener } from '@/lib/spotify/client'
 import {
   beginLogin,
@@ -34,27 +35,40 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null)
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [user, setUser] = useState<SpotifyUser | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  const applyTokens = useCallback(async (tokens: StoredTokens | null) => {
-    if (!tokens) {
-      setUser(null)
-      setStatus('unauthenticated')
-      return
-    }
-    try {
-      const me = await fetchCurrentUser()
-      setUser(me)
-      setStatus('authenticated')
-    } catch (err) {
-      clearTokens()
-      setUser(null)
-      setStatus('unauthenticated')
-      setError(err instanceof Error ? err.message : 'Failed to load profile')
-    }
-  }, [])
+  const clearSession = useCallback(() => {
+    clearTokens()
+    queryClient.clear()
+    setUser(null)
+    setStatus('unauthenticated')
+  }, [queryClient])
+
+  const applyTokens = useCallback(
+    async (tokens: StoredTokens | null) => {
+      if (!tokens) {
+        queryClient.clear()
+        setUser(null)
+        setStatus('unauthenticated')
+        return
+      }
+      try {
+        const me = await fetchCurrentUser()
+        setUser(me)
+        setStatus('authenticated')
+      } catch (err) {
+        clearTokens()
+        queryClient.clear()
+        setUser(null)
+        setStatus('unauthenticated')
+        setError(err instanceof Error ? err.message : 'Failed to load profile')
+      }
+    },
+    [queryClient],
+  )
 
   useEffect(() => {
     setTokenChangeListener((tokens) => {
@@ -106,10 +120,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
-    clearTokens()
-    setUser(null)
-    setStatus('unauthenticated')
-  }, [])
+    clearSession()
+  }, [clearSession])
 
   const value = useMemo(
     () => ({

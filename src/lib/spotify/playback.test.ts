@@ -1,12 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('./client', () => ({
+  QUOTA_EXCEEDED: 'QUOTA_EXCEEDED',
   SpotifyApiError: class SpotifyApiError extends Error {
     status: number
-    constructor(status: number, message: string) {
+    reason?: string
+    constructor(status: number, message: string, reason?: string) {
       super(message)
       this.name = 'SpotifyApiError'
       this.status = status
+      this.reason = reason
     }
   },
   spotifyFetch: vi.fn(),

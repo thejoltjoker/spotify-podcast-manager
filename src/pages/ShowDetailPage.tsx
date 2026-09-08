@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import {
   Box,
   Button,
@@ -10,12 +10,21 @@ import {
   Text,
   VStack,
 } from '@chakra-ui/react'
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import { Link as RouterLink, useParams } from 'react-router'
 import { LuArrowLeft } from 'react-icons/lu'
 import { useAuth } from '@/auth/AuthContext'
 import { ShowEpisodeTable } from '@/components/ShowEpisodeTable'
 import { toaster } from '@/components/ui/toaster'
-import { libraryContains, removeFromLibrary, saveToLibrary } from '@/lib/spotify/library'
+import { queryKeys } from '@/lib/query'
+import { fetchAllSavedEpisodes } from '@/lib/spotify/episodes'
+import { formatSpotifyError } from '@/lib/spotify/errors'
+import { removeFromLibrary, saveToLibrary } from '@/lib/spotify/library'
 import {
   formatPlaybackError,
   playbackPositionMs,
@@ -25,138 +34,126 @@ import {
 import {
   fetchShow,
   fetchShowEpisodesPage,
+  showEpisodesFromEmbedded,
   toShowRow,
+  withSavedInLibrary,
+  type ShowEpisodesPage,
 } from '@/lib/spotify/shows'
-import type { ShowEpisodeRow, ShowRow, SpotifyShow } from '@/lib/spotify/types'
+import type { EpisodeRow, ShowEpisodeRow } from '@/lib/spotify/types'
+
+type EpisodesPage = ShowEpisodesPage
+
+function toEpisodeRowFromShowEpisode(row: ShowEpisodeRow): EpisodeRow {
+  const { savedInLibrary: _saved, ...rest } = row
+  return {
+    ...rest,
+    addedAt: new Date().toISOString(),
+  }
+}
 
 export function ShowDetailPage() {
   const { isPremium } = useAuth()
   const { showId } = useParams<{ showId: string }>()
-  const [show, setShow] = useState<SpotifyShow | null>(null)
-  const [showRow, setShowRow] = useState<ShowRow | null>(null)
-  const [episodes, setEpisodes] = useState<ShowEpisodeRow[]>([])
-  const [total, setTotal] = useState(0)
-  const [nextOffset, setNextOffset] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [libraryBusy, setLibraryBusy] = useState(false)
+  const queryClient = useQueryClient()
   const [playbackBusy, setPlaybackBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  const applySavedFlags = useCallback(
-    async (rows: ShowEpisodeRow[]): Promise<ShowEpisodeRow[]> => {
-      if (rows.length === 0) return rows
-      const flags = await libraryContains(rows.map((row) => row.uri))
-      return rows.map((row) => ({
-        ...row,
-        savedInLibrary: flags.get(row.uri) ?? false,
-      }))
-    },
-    [],
+  const showQuery = useQuery({
+    queryKey: queryKeys.show(showId ?? ''),
+    queryFn: () => fetchShow(showId!),
+    enabled: Boolean(showId),
+  })
+
+  const savedEpisodesQuery = useQuery({
+    queryKey: queryKeys.savedEpisodes,
+    queryFn: fetchAllSavedEpisodes,
+  })
+
+  const savedIds = useMemo(
+    () => new Set((savedEpisodesQuery.data ?? []).map((row) => row.id)),
+    [savedEpisodesQuery.data],
   )
 
-  const loadInitial = useCallback(async () => {
-    if (!showId) {
-      setError('Missing show id')
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError(null)
-    try {
-      const loadedShow = await fetchShow(showId)
-      setShow(loadedShow)
-      setShowRow(toShowRow(loadedShow, ''))
-      const page = await fetchShowEpisodesPage(showId, loadedShow, 0)
-      const withFlags = await applySavedFlags(page.rows)
-      setEpisodes(withFlags)
-      setTotal(page.total)
-      setNextOffset(page.nextOffset)
-      setHasMore(page.hasMore)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load show')
-    } finally {
-      setLoading(false)
-    }
-  }, [applySavedFlags, showId])
+  const show = showQuery.data ?? null
+  const showRow = useMemo(
+    () => (show ? toShowRow(show, '') : null),
+    [show],
+  )
 
-  useEffect(() => {
-    void loadInitial()
-  }, [loadInitial])
+  const episodesQuery = useInfiniteQuery({
+    queryKey: queryKeys.showEpisodes(showId ?? ''),
+    enabled: Boolean(showId) && Boolean(show),
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }) => {
+      if (pageParam === 0) {
+        const embedded = showEpisodesFromEmbedded(show!)
+        if (embedded) return embedded
+      }
+      return fetchShowEpisodesPage(showId!, show!, pageParam)
+    },
+    getNextPageParam: (last) => (last.hasMore ? last.nextOffset : undefined),
+  })
 
-  const handleLoadMore = useCallback(async () => {
-    if (!showId || !show || !hasMore || loadingMore) return
-    setLoadingMore(true)
-    try {
-      const page = await fetchShowEpisodesPage(showId, show, nextOffset)
-      const withFlags = await applySavedFlags(page.rows)
-      setEpisodes((prev) => [...prev, ...withFlags])
-      setTotal(page.total)
-      setNextOffset(page.nextOffset)
-      setHasMore(page.hasMore)
-    } catch (err) {
-      toaster.create({
-        title: 'Could not load more episodes',
-        description: err instanceof Error ? err.message : 'Unknown error',
-        type: 'error',
-      })
-    } finally {
-      setLoadingMore(false)
-    }
-  }, [applySavedFlags, hasMore, loadingMore, nextOffset, show, showId])
+  const episodes = useMemo(() => {
+    const raw =
+      episodesQuery.data?.pages.flatMap((page: EpisodesPage) => page.rows) ??
+      []
+    return withSavedInLibrary(raw, savedIds)
+  }, [episodesQuery.data, savedIds])
+  const total = episodesQuery.data?.pages[0]?.total ?? 0
 
-  const handleSave = useCallback(async (rows: ShowEpisodeRow[]) => {
-    if (rows.length === 0) return
-    setLibraryBusy(true)
-    try {
+  const saveMutation = useMutation({
+    mutationFn: async (rows: ShowEpisodeRow[]) => {
       await saveToLibrary(rows.map((row) => row.uri))
-      const ids = new Set(rows.map((row) => row.id))
-      setEpisodes((prev) =>
-        prev.map((row) =>
-          ids.has(row.id) ? { ...row, savedInLibrary: true } : row,
-        ),
+      return rows
+    },
+    onSuccess: (rows) => {
+      queryClient.setQueryData<EpisodeRow[]>(
+        queryKeys.savedEpisodes,
+        (prev) => {
+          const existing = new Set((prev ?? []).map((row) => row.id))
+          const additions = rows
+            .filter((row) => !existing.has(row.id))
+            .map(toEpisodeRowFromShowEpisode)
+          return [...additions, ...(prev ?? [])]
+        },
       )
       toaster.create({
         title: `Saved ${rows.length} episode${rows.length === 1 ? '' : 's'}`,
         type: 'success',
       })
-    } catch (err) {
+    },
+    onError: (err) => {
       toaster.create({
         title: 'Save failed',
-        description: err instanceof Error ? err.message : 'Unknown error',
+        description: formatSpotifyError(err),
         type: 'error',
       })
-    } finally {
-      setLibraryBusy(false)
-    }
-  }, [])
+    },
+  })
 
-  const handleRemove = useCallback(async (rows: ShowEpisodeRow[]) => {
-    if (rows.length === 0) return
-    setLibraryBusy(true)
-    try {
+  const removeMutation = useMutation({
+    mutationFn: async (rows: ShowEpisodeRow[]) => {
       await removeFromLibrary(rows.map((row) => row.uri))
-      const ids = new Set(rows.map((row) => row.id))
-      setEpisodes((prev) =>
-        prev.map((row) =>
-          ids.has(row.id) ? { ...row, savedInLibrary: false } : row,
-        ),
+      return rows
+    },
+    onSuccess: (rows) => {
+      const removedIds = new Set(rows.map((row) => row.id))
+      queryClient.setQueryData<EpisodeRow[]>(queryKeys.savedEpisodes, (prev) =>
+        (prev ?? []).filter((row) => !removedIds.has(row.id)),
       )
       toaster.create({
         title: `Removed ${rows.length} episode${rows.length === 1 ? '' : 's'}`,
         type: 'success',
       })
-    } catch (err) {
+    },
+    onError: (err) => {
       toaster.create({
         title: 'Remove failed',
-        description: err instanceof Error ? err.message : 'Unknown error',
+        description: formatSpotifyError(err),
         type: 'error',
       })
-    } finally {
-      setLibraryBusy(false)
-    }
-  }, [])
+    },
+  })
 
   const handlePlay = useCallback(async (rows: ShowEpisodeRow[]) => {
     if (rows.length === 0) return
@@ -241,6 +238,21 @@ export function ShowDetailPage() {
     }
   }, [])
 
+  const error =
+    !showId
+      ? 'Missing show id'
+      : showQuery.error
+        ? formatSpotifyError(showQuery.error, 'Failed to load show')
+        : episodesQuery.error
+          ? formatSpotifyError(episodesQuery.error, 'Failed to load episodes')
+          : null
+
+  const loading =
+    Boolean(showId) &&
+    (showQuery.isPending ||
+      episodesQuery.isPending ||
+      savedEpisodesQuery.isPending)
+
   return (
     <Box py="6">
       <Container maxW="7xl">
@@ -298,14 +310,20 @@ export function ShowDetailPage() {
             data={episodes}
             loading={loading}
             total={total}
-            hasMore={hasMore}
-            loadingMore={loadingMore}
-            onLoadMore={() => void handleLoadMore()}
-            onSave={handleSave}
-            onRemove={handleRemove}
+            hasMore={Boolean(episodesQuery.hasNextPage)}
+            loadingMore={episodesQuery.isFetchingNextPage}
+            onLoadMore={() => {
+              void episodesQuery.fetchNextPage()
+            }}
+            onSave={async (rows) => {
+              await saveMutation.mutateAsync(rows)
+            }}
+            onRemove={async (rows) => {
+              await removeMutation.mutateAsync(rows)
+            }}
             onPlay={handlePlay}
             onQueue={handleQueue}
-            libraryBusy={libraryBusy}
+            libraryBusy={saveMutation.isPending || removeMutation.isPending}
             playbackBusy={playbackBusy}
             playbackAllowed={isPremium}
           />
