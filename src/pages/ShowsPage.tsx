@@ -1,14 +1,10 @@
 import {
   Box,
   Button,
-  Container,
-  Heading,
-  HStack,
-  Spinner,
   Text,
-  VStack,
 } from '@chakra-ui/react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ListInfoBar } from '@/components/ListChrome'
 import { ShowTable } from '@/components/ShowTable'
 import { toaster } from '@/components/ui/toaster'
 import { queryKeys } from '@/lib/query'
@@ -55,49 +51,50 @@ export function ShowsPage() {
     },
   })
 
+  const refreshButton = (
+    <Button
+      size="sm"
+      variant="outline"
+      onClick={() => void refetch()}
+      loading={isFetching && !isPending}
+      disabled={isPending}
+    >
+      Refresh
+    </Button>
+  )
+
   return (
-    <Box py="6">
-      <Container maxW="7xl">
-        <VStack align="stretch" gap="6">
-          <HStack justify="space-between" align="start" flexWrap="wrap" gap="3">
-            <VStack align="start" gap="1">
-              <Heading size="xl">Followed shows</Heading>
-              <Text fontSize="sm" color="fg.muted">
-                Browse shows you follow and open a show to find episodes not yet
-                in your library
-              </Text>
-            </VStack>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void refetch()}
-              loading={isFetching && !isPending}
-              disabled={isPending}
-            >
-              Refresh
-            </Button>
-          </HStack>
-
-          {error ? (
-            <Text color="fg.error">{formatSpotifyError(error, 'Failed to load shows')}</Text>
-          ) : null}
-
-          {isPending ? (
-            <VStack py="16" gap="3">
-              <Spinner size="lg" />
-              <Text color="fg.muted">Loading followed shows…</Text>
-            </VStack>
-          ) : (
-            <ShowTable
-              data={shows}
-              onUnfollow={async (unfollowed) => {
-                await unfollowMutation.mutateAsync(unfollowed)
-              }}
-              unfollowing={unfollowMutation.isPending}
-            />
-          )}
-        </VStack>
-      </Container>
+    <Box
+      flex="1"
+      bg="bg.muted"
+      px={{ base: '4', md: '6' }}
+      py={{ base: '4', md: '6' }}
+    >
+      {error ? (
+        <>
+          <ListInfoBar
+            title="Followed shows"
+            description="Browse shows you follow and open a show to find episodes not yet in your library"
+          >
+            {refreshButton}
+          </ListInfoBar>
+          <Text color="fg.error" mt="4">
+            {formatSpotifyError(error, 'Failed to load shows')}
+          </Text>
+        </>
+      ) : (
+        <ShowTable
+          title="Followed shows"
+          description="Browse shows you follow and open a show to find episodes not yet in your library"
+          headerActions={refreshButton}
+          data={shows}
+          loading={isPending}
+          onUnfollow={async (unfollowed) => {
+            await unfollowMutation.mutateAsync(unfollowed)
+          }}
+          unfollowing={unfollowMutation.isPending}
+        />
+      )}
     </Box>
   )
 }

@@ -1,27 +1,27 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   ActionBar,
-  Badge,
   Box,
   Button,
   ButtonGroup,
+  Card,
   Checkbox,
   CloseButton,
-  Combobox,
   Dialog,
   HStack,
   IconButton,
   Image,
   Input,
+  InputGroup,
   Link,
   Menu,
+  NativeSelect,
   Pagination,
   Portal,
+  Spinner,
   Table,
   Text,
   VStack,
-  useFilter,
-  useListCollection,
 } from '@chakra-ui/react'
 import {
   createColumnHelper,
@@ -31,7 +31,6 @@ import {
   getPaginationRowModel,
   getSortedRowModel,
   useReactTable,
-  type ColumnFiltersState,
   type RowSelectionState,
   type SortingState,
 } from '@tanstack/react-table'
@@ -42,10 +41,18 @@ import {
   LuChevronRight,
   LuEllipsisVertical,
   LuExternalLink,
+  LuSearch,
   LuUserMinus,
 } from 'react-icons/lu'
+import {
+  ListFilterBar,
+  ListInfoBar,
+  ListStatCards,
+} from '@/components/ListChrome'
 import type { ShowRow } from '@/lib/spotify/types'
 import { Tooltip } from '@/components/ui/tooltip'
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
 
 const columnHelper = createColumnHelper<ShowRow>()
 
@@ -57,56 +64,30 @@ function formatFollowedDate(iso: string): string {
 
 type ShowTableProps = {
   data: ShowRow[]
+  loading: boolean
+  title: string
+  description?: string
+  headerActions?: ReactNode
   onUnfollow: (rows: ShowRow[]) => Promise<void>
   unfollowing: boolean
 }
 
-export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
+export function ShowTable({
+  data,
+  loading,
+  title,
+  description,
+  headerActions,
+  onUnfollow,
+  unfollowing,
+}: ShowTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: 'addedAt', desc: true },
   ])
   const [globalFilter, setGlobalFilter] = useState('')
-  const [selectedPublishers, setSelectedPublishers] = useState<string[]>([])
+  const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 })
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({})
   const [confirmRows, setConfirmRows] = useState<ShowRow[] | null>(null)
-
-  const publisherItems = useMemo(() => {
-    const names = [
-      ...new Set(data.map((row) => row.publisher).filter(Boolean)),
-    ]
-    names.sort((a, b) => a.localeCompare(b))
-    return names.map((name) => ({ label: name, value: name }))
-  }, [data])
-
-  const { contains } = useFilter({ sensitivity: 'base' })
-  const {
-    collection,
-    filter,
-    set: setPublisherCollection,
-  } = useListCollection({
-    initialItems: publisherItems,
-    filter: contains,
-  })
-
-  useEffect(() => {
-    setPublisherCollection(publisherItems)
-  }, [publisherItems, setPublisherCollection])
-
-  useEffect(() => {
-    const available = new Set(publisherItems.map((item) => item.value))
-    setSelectedPublishers((prev) => {
-      const next = prev.filter((publisher) => available.has(publisher))
-      return next.length === prev.length ? prev : next
-    })
-  }, [publisherItems])
-
-  const columnFilters = useMemo<ColumnFiltersState>(() => {
-    const filters: ColumnFiltersState = []
-    if (selectedPublishers.length > 0) {
-      filters.push({ id: 'publisher', value: selectedPublishers })
-    }
-    return filters
-  }, [selectedPublishers])
 
   const columns = useMemo(
     () => [
@@ -169,28 +150,11 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
       columnHelper.accessor('name', {
         header: 'Show',
         cell: ({ row }) => (
-          <VStack align="start" gap="0" minW="0">
-            <Link asChild color="fg" fontWeight="medium" lineClamp={1}>
-              <NavLink to={`/shows/${row.original.id}`}>
-                {row.original.name}
-              </NavLink>
-            </Link>
-            <Text fontSize="sm" color="fg.muted" lineClamp={1}>
-              {row.original.publisher}
-            </Text>
-          </VStack>
-        ),
-      }),
-      columnHelper.accessor('publisher', {
-        header: 'Publisher',
-        filterFn: (row, columnId, filterValue: string[]) => {
-          if (!filterValue?.length) return true
-          return filterValue.includes(row.getValue(columnId))
-        },
-        cell: (info) => (
-          <Text color="fg.muted" lineClamp={1}>
-            {info.getValue()}
-          </Text>
+          <Link asChild color="fg" fontWeight="medium" lineClamp={1}>
+            <NavLink to={`/shows/${row.original.id}`}>
+              {row.original.name}
+            </NavLink>
+          </Link>
         ),
       }),
       columnHelper.accessor('totalEpisodes', {
@@ -309,9 +273,20 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter, columnFilters, rowSelection },
+    state: {
+      sorting,
+      globalFilter,
+      rowSelection,
+      pagination,
+    },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    onGlobalFilterChange: (updater) => {
+      setGlobalFilter((prev) =>
+        typeof updater === 'function' ? updater(prev) : updater,
+      )
+      setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+    },
+    onPaginationChange: setPagination,
     onRowSelectionChange: setRowSelection,
     getRowId: (row) => row.id,
     enableRowSelection: true,
@@ -323,28 +298,34 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
     globalFilterFn: (row, _columnId, filterValue: string) => {
       const q = filterValue.trim().toLowerCase()
       if (!q) return true
-      return (
-        row.original.name.toLowerCase().includes(q) ||
-        row.original.publisher.toLowerCase().includes(q)
-      )
-    },
-    initialState: {
-      pagination: { pageSize: 25 },
+      return row.original.name.toLowerCase().includes(q)
     },
   })
 
   const pageCount = table.getPageCount()
-  const pageIndex = table.getState().pagination.pageIndex
+  const pageIndex = pagination.pageIndex
+  const pageSize = pagination.pageSize
   useEffect(() => {
     if (pageCount > 0 && pageIndex >= pageCount) {
-      table.setPageIndex(pageCount - 1)
+      setPagination((prev) => ({ ...prev, pageIndex: pageCount - 1 }))
     }
-  }, [pageCount, pageIndex, table])
+  }, [pageCount, pageIndex])
 
   const selectedRows = table
     .getSelectedRowModel()
     .rows.map((row) => row.original)
   const filteredRows = table.getFilteredRowModel().rows
+  const catalogEpisodes = filteredRows.reduce(
+    (sum, row) => sum + (row.original.totalEpisodes ?? 0),
+    0,
+  )
+  const showsWithCounts = filteredRows.filter(
+    (row) => row.original.totalEpisodes != null,
+  ).length
+  const avgEpisodes =
+    showsWithCounts > 0
+      ? Math.round(catalogEpisodes / showsWithCounts)
+      : null
 
   async function handleConfirmUnfollow() {
     if (!confirmRows?.length) return
@@ -361,97 +342,76 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
 
   const confirmCount = confirmRows?.length ?? 0
   const confirmName = confirmRows?.[0]?.name
+  const stats = [
+    {
+      label: 'Shows',
+      value: String(filteredRows.length),
+      hint:
+        filteredRows.length === data.length
+          ? 'You follow'
+          : `of ${data.length} followed`,
+    },
+    {
+      label: 'Catalog episodes',
+      value: String(catalogEpisodes),
+      hint: 'Listed on Spotify',
+    },
+    {
+      label: 'Avg. episodes',
+      value: avgEpisodes == null ? '—' : String(avgEpisodes),
+      hint: 'Per show with a count',
+    },
+  ]
 
   return (
     <VStack align="stretch" gap="4">
-      <HStack gap="3" w="full" flexWrap="wrap">
-        <Input
-          flex="1"
-          minW="2xs"
-          placeholder="Filter shows…"
-          value={globalFilter}
-          onChange={(e) => setGlobalFilter(e.target.value)}
-        />
-        <Combobox.Root
-          multiple
-          closeOnSelect={false}
-          flex="1"
-          minW="2xs"
-          width="full"
-          openOnClick
-          collection={collection}
-          value={selectedPublishers}
-          onValueChange={(details) => setSelectedPublishers(details.value)}
-          onInputValueChange={(details) => filter(details.inputValue)}
-          placeholder="Filter by publisher…"
-        >
-          <Combobox.Control>
-            <Combobox.Input />
-            <Combobox.IndicatorGroup>
-              <Combobox.ClearTrigger />
-              <Combobox.Trigger />
-            </Combobox.IndicatorGroup>
-          </Combobox.Control>
-          <Portal>
-            <Combobox.Positioner>
-              <Combobox.Content>
-                <Combobox.Empty>No publishers found</Combobox.Empty>
-                {collection.items.map((item) => (
-                  <Combobox.Item key={item.value} item={item}>
-                    <Combobox.ItemText>{item.label}</Combobox.ItemText>
-                    <Combobox.ItemIndicator />
-                  </Combobox.Item>
-                ))}
-              </Combobox.Content>
-            </Combobox.Positioner>
-          </Portal>
-        </Combobox.Root>
-      </HStack>
-
-      <Text
-        fontSize="sm"
-        color="fg.muted"
-        whiteSpace="nowrap"
-        alignSelf="flex-end"
-      >
-        {filteredRows.length} of {data.length} shows
-      </Text>
-
-      {selectedPublishers.length > 0 ? (
-        <HStack gap="2" flexWrap="wrap">
-          {selectedPublishers.map((publisher) => (
-            <Badge
-              key={publisher}
+      <ListInfoBar title={title} description={description}>
+        {headerActions}
+      </ListInfoBar>
+      {loading ? null : (
+        <ListFilterBar>
+          <InputGroup
+            startElement={<LuSearch />}
+            flex="1"
+            minW="200px"
+            maxW="sm"
+          >
+            <Input
               size="sm"
-              colorPalette="green"
-              variant="subtle"
-              cursor="pointer"
-              onClick={() =>
-                setSelectedPublishers((prev) =>
-                  prev.filter((p) => p !== publisher),
-                )
-              }
-              title="Remove filter"
-            >
-              {publisher} ×
-            </Badge>
-          ))}
-        </HStack>
-      ) : null}
+              type="search"
+              aria-label="Filter shows"
+              placeholder="Filter shows…"
+              value={globalFilter}
+              onChange={(e) => {
+                setGlobalFilter(e.target.value)
+                setPagination((prev) => ({ ...prev, pageIndex: 0 }))
+              }}
+            />
+          </InputGroup>
+        </ListFilterBar>
+      )}
+      {loading ? null : <ListStatCards items={stats} />}
 
-      {data.length === 0 ? (
-        <Box py="12" textAlign="center">
-          <Text color="fg.muted">
-            You are not following any podcast shows yet.
-          </Text>
-        </Box>
+      {loading ? (
+        <VStack py="16" gap="3">
+          <Spinner size="lg" />
+          <Text color="fg.muted">Loading followed shows…</Text>
+        </VStack>
+      ) : data.length === 0 ? (
+        <Card.Root variant="outline">
+          <Card.Body py="12" textAlign="center">
+            <Text color="fg.muted">
+              You are not following any podcast shows yet.
+            </Text>
+          </Card.Body>
+        </Card.Root>
       ) : (
-        <>
-          <Table.ScrollArea borderWidth="1px" rounded="md">
+        <Card.Root variant="outline" overflow="hidden">
+          <Table.ScrollArea>
             <Table.Root size="sm" stickyHeader>
               <Table.Header>
                 {table.getHeaderGroups().map((headerGroup) => (
-                  <Table.Row key={headerGroup.id}>
+                  <Table.Row key={headerGroup.id} bg="bg.subtle">
                     {headerGroup.headers.map((header) => {
                       const canSort = header.column.getCanSort()
                       return (
@@ -491,6 +451,10 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
                   <Table.Row
                     key={row.id}
                     data-selected={row.getIsSelected() || undefined}
+                    _selected={{
+                      bg: 'orange.subtle',
+                      boxShadow: 'inset 3px 0 0 {colors.orange.solid}',
+                    }}
                   >
                     {row.getVisibleCells().map((cell) => (
                       <Table.Cell key={cell.id}>
@@ -506,13 +470,47 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
             </Table.Root>
           </Table.ScrollArea>
 
-          <HStack justify="flex-end">
+          <HStack
+            justify="space-between"
+            flexWrap="wrap"
+            gap="3"
+            px="4"
+            py="3"
+            borderTopWidth="1px"
+          >
+            <HStack gap="2">
+              <Text fontSize="sm" color="fg.muted" whiteSpace="nowrap">
+                Per page
+              </Text>
+              <NativeSelect.Root size="sm" width="20">
+                <NativeSelect.Field
+                  aria-label="Rows per page"
+                  value={String(pageSize)}
+                  onChange={(e) => {
+                    setPagination({
+                      pageIndex: 0,
+                      pageSize: Number(e.target.value),
+                    })
+                  }}
+                >
+                  {PAGE_SIZE_OPTIONS.map((size) => (
+                    <option key={size} value={size}>
+                      {size}
+                    </option>
+                  ))}
+                </NativeSelect.Field>
+                <NativeSelect.Indicator />
+              </NativeSelect.Root>
+            </HStack>
             <Pagination.Root
               count={filteredRows.length}
-              pageSize={table.getState().pagination.pageSize}
+              pageSize={pageSize}
               page={pageIndex + 1}
               onPageChange={(details) => {
-                table.setPageIndex(details.page - 1)
+                setPagination((prev) => ({
+                  ...prev,
+                  pageIndex: details.page - 1,
+                }))
               }}
             >
               <ButtonGroup variant="ghost" size="sm">
@@ -538,7 +536,7 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
               </ButtonGroup>
             </Pagination.Root>
           </HStack>
-        </>
+        </Card.Root>
       )}
 
       <ActionBar.Root
