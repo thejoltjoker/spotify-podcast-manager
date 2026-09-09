@@ -37,6 +37,7 @@ import {
 } from '@tanstack/react-table'
 import { NavLink } from 'react-router'
 import {
+  LuAppWindow,
   LuChevronLeft,
   LuChevronRight,
   LuEllipsisVertical,
@@ -44,6 +45,7 @@ import {
   LuUserMinus,
 } from 'react-icons/lu'
 import type { ShowRow } from '@/lib/spotify/types'
+import { Tooltip } from '@/components/ui/tooltip'
 
 const columnHelper = createColumnHelper<ShowRow>()
 
@@ -210,31 +212,46 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
           return (
             <>
               <HStack gap="0" display={{ base: 'none', xl: 'flex' }}>
-                <IconButton
-                  asChild
-                  size="sm"
-                  variant="ghost"
-                  aria-label="Open in Spotify"
-                >
-                  <Link
-                    href={show.spotifyUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                <Tooltip content="Open in Spotify app">
+                  <IconButton
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Open in Spotify app"
                   >
-                    <LuExternalLink />
-                  </Link>
-                </IconButton>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  colorPalette="red"
-                  aria-label={`Unfollow “${show.name}”`}
-                  title="Unfollow show"
-                  disabled={unfollowing}
-                  onClick={() => setConfirmRows([show])}
-                >
-                  <LuUserMinus />
-                </IconButton>
+                    <Link href={show.uri}>
+                      <LuAppWindow />
+                    </Link>
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content="Open in browser">
+                  <IconButton
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Open in browser"
+                  >
+                    <Link
+                      href={show.spotifyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <LuExternalLink />
+                    </Link>
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content="Unfollow show">
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    colorPalette="red"
+                    aria-label={`Unfollow “${show.name}”`}
+                    disabled={unfollowing}
+                    onClick={() => setConfirmRows([show])}
+                  >
+                    <LuUserMinus />
+                  </IconButton>
+                </Tooltip>
               </HStack>
 
               <Box display={{ base: 'block', xl: 'none' }}>
@@ -251,14 +268,20 @@ export function ShowTable({ data, onUnfollow, unfollowing }: ShowTableProps) {
                   <Portal>
                     <Menu.Positioner>
                       <Menu.Content>
-                        <Menu.Item value="open" asChild>
+                        <Menu.Item value="open-app" asChild>
+                          <Link href={show.uri}>
+                            <LuAppWindow />
+                            Open in Spotify app
+                          </Link>
+                        </Menu.Item>
+                        <Menu.Item value="open-web" asChild>
                           <Link
                             href={show.spotifyUrl}
                             target="_blank"
                             rel="noreferrer"
                           >
                             <LuExternalLink />
-                            Open in Spotify
+                            Open in browser
                           </Link>
                         </Menu.Item>
                         <Menu.Item

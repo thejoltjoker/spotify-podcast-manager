@@ -40,6 +40,7 @@ import {
   type SortingState,
 } from "@tanstack/react-table";
 import {
+  LuAppWindow,
   LuChevronLeft,
   LuChevronRight,
   LuEllipsisVertical,
@@ -49,6 +50,15 @@ import {
   LuSearch,
   LuTrash2,
 } from "react-icons/lu";
+import { useSearchParams } from "react-router";
+import {
+  EPISODE_PAGE_SIZE_OPTIONS,
+  episodeTableParamsEqual,
+  parseEpisodeTableParams,
+  serializeEpisodeTableParams,
+  type EpisodePageSize,
+  type EpisodeTableParams,
+} from "@/lib/episodeTableParams";
 import { formatDuration, formatTotalDuration } from "@/lib/format";
 import {
   PLAY_STATUS_LABELS,
@@ -77,8 +87,6 @@ const PLAY_STATUS_COLORS: Record<PlayStatus, string> = {
   in_progress: "orange",
   finished: "green",
 };
-
-const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 const columnHelper = createColumnHelper<EpisodeRow>();
 
@@ -131,12 +139,45 @@ export function EpisodeTable({
   const actionsDisabled = removing || playbackBusy;
   const playbackDisabled = actionsDisabled || !playbackAllowed;
   const playbackTitle = playbackAllowed ? undefined : PREMIUM_HINT;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tableParams = useMemo(
+    () => parseEpisodeTableParams(searchParams),
+    [searchParams]
+  );
+  const globalFilter = tableParams.q;
+  const selectedShows = tableParams.shows;
+  const selectedStatuses = tableParams.statuses;
+  const pageIndex = tableParams.page - 1;
+  const pageSize = tableParams.pageSize;
+
+  const updateTableParams = useCallback(
+    (
+      patch: Partial<EpisodeTableParams>,
+      options: { replace: boolean; resetPage?: boolean }
+    ) => {
+      const next: EpisodeTableParams = {
+        ...tableParams,
+        ...patch,
+        page: options.resetPage ? 1 : (patch.page ?? tableParams.page),
+      };
+      const normalized: EpisodeTableParams = {
+        q: next.q.trim(),
+        shows: next.shows,
+        statuses: next.statuses,
+        page: next.page,
+        pageSize: next.pageSize,
+      };
+      if (episodeTableParamsEqual(tableParams, normalized)) return;
+      setSearchParams(serializeEpisodeTableParams(normalized), {
+        replace: options.replace,
+      });
+    },
+    [setSearchParams, tableParams]
+  );
+
   const [sorting, setSorting] = useState<SortingState>([
     { id: "releaseDate", desc: true },
   ]);
-  const [globalFilter, setGlobalFilter] = useState("");
-  const [selectedShows, setSelectedShows] = useState<string[]>([]);
-  const [selectedStatuses, setSelectedStatuses] = useState<PlayStatus[]>([]);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   const [confirmRows, setConfirmRows] = useState<EpisodeRow[] | null>(null);
 
@@ -174,12 +215,13 @@ export function EpisodeTable({
   }, [setStatusCollection]);
 
   useEffect(() => {
+    if (loading) return;
     const available = new Set(showItems.map((item) => item.value));
-    setSelectedShows((prev) => {
-      const next = prev.filter((show) => available.has(show));
-      return next.length === prev.length ? prev : next;
-    });
-  }, [showItems]);
+    const next = selectedShows.filter((show) => available.has(show));
+    if (next.length !== selectedShows.length) {
+      updateTableParams({ shows: next }, { replace: true, resetPage: true });
+    }
+  }, [loading, selectedShows, showItems, updateTableParams]);
 
   const columnFilters = useMemo<ColumnFiltersState>(() => {
     const filters: ColumnFiltersState = [];
@@ -343,55 +385,68 @@ export function EpisodeTable({
           return (
             <>
               <HStack gap="0" display={{ base: "none", xl: "flex" }}>
-                <IconButton
-                  asChild
-                  size="sm"
-                  variant="ghost"
-                  aria-label="Open in Spotify"
-                >
-                  <Link
-                    href={episode.spotifyUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                <Tooltip content="Open in Spotify app">
+                  <IconButton
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Open in Spotify app"
                   >
-                    <LuExternalLink />
-                  </Link>
-                </IconButton>
-                <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                    <Link href={episode.uri}>
+                      <LuAppWindow />
+                    </Link>
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content="Open in browser">
+                  <IconButton
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Open in browser"
+                  >
+                    <Link
+                      href={episode.spotifyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <LuExternalLink />
+                    </Link>
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content={playbackTitle ?? "Play now"}>
                   <IconButton
                     size="sm"
                     variant="ghost"
                     aria-label={`Play “${episode.name}”`}
-                    title={playbackTitle ?? "Play now"}
                     disabled={playbackDisabled}
                     onClick={() => void onPlay([episode])}
                   >
                     <LuPlay />
                   </IconButton>
                 </Tooltip>
-                <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                <Tooltip content={playbackTitle ?? "Add to queue"}>
                   <IconButton
                     size="sm"
                     variant="ghost"
                     aria-label={`Add “${episode.name}” to queue`}
-                    title={playbackTitle ?? "Add to queue"}
                     disabled={playbackDisabled}
                     onClick={() => void onQueue([episode])}
                   >
                     <LuListPlus />
                   </IconButton>
                 </Tooltip>
-                <IconButton
-                  size="sm"
-                  variant="ghost"
-                  colorPalette="red"
-                  aria-label={`Remove ${episode.name}`}
-                  title="Remove from library"
-                  disabled={actionsDisabled}
-                  onClick={() => requestConfirm([episode])}
-                >
-                  <LuTrash2 />
-                </IconButton>
+                <Tooltip content="Remove from library">
+                  <IconButton
+                    size="sm"
+                    variant="ghost"
+                    colorPalette="red"
+                    aria-label={`Remove ${episode.name}`}
+                    disabled={actionsDisabled}
+                    onClick={() => requestConfirm([episode])}
+                  >
+                    <LuTrash2 />
+                  </IconButton>
+                </Tooltip>
               </HStack>
 
               <Box display={{ base: "block", xl: "none" }}>
@@ -408,14 +463,20 @@ export function EpisodeTable({
                   <Portal>
                     <Menu.Positioner>
                       <Menu.Content>
-                        <Menu.Item value="open" asChild>
+                        <Menu.Item value="open-app" asChild>
+                          <Link href={episode.uri}>
+                            <LuAppWindow />
+                            Open in Spotify app
+                          </Link>
+                        </Menu.Item>
+                        <Menu.Item value="open-web" asChild>
                           <Link
                             href={episode.spotifyUrl}
                             target="_blank"
                             rel="noreferrer"
                           >
                             <LuExternalLink />
-                            Open in Spotify
+                            Open in browser
                           </Link>
                         </Menu.Item>
                         <Menu.Item
@@ -462,29 +523,31 @@ export function EpisodeTable({
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, globalFilter, columnFilters, rowSelection },
+    state: {
+      sorting,
+      globalFilter,
+      columnFilters,
+      rowSelection,
+      pagination: { pageIndex, pageSize },
+    },
     onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
     onRowSelectionChange: setRowSelection,
     getRowId: (row) => row.id,
     enableRowSelection: true,
     autoResetPageIndex: false,
+    manualPagination: false,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: { pageSize: 25 },
-    },
   });
 
   const pageCount = table.getPageCount();
-  const pageIndex = table.getState().pagination.pageIndex;
   useEffect(() => {
     if (pageCount > 0 && pageIndex >= pageCount) {
-      table.setPageIndex(pageCount - 1);
+      updateTableParams({ page: pageCount }, { replace: true });
     }
-  }, [pageCount, pageIndex, table]);
+  }, [pageCount, pageIndex, updateTableParams]);
 
   const selectedRows = table
     .getSelectedRowModel()
@@ -518,7 +581,6 @@ export function EpisodeTable({
     globalFilter.trim().length > 0 ||
     selectedShows.length > 0 ||
     selectedStatuses.length > 0;
-  const pageSize = table.getState().pagination.pageSize;
   const stats = [
     {
       label: "Episodes",
@@ -565,7 +627,12 @@ export function EpisodeTable({
                 aria-label="Filter episodes"
                 placeholder="Filter episodes…"
                 value={globalFilter}
-                onChange={(e) => setGlobalFilter(e.target.value)}
+                onChange={(e) =>
+                  updateTableParams(
+                    { q: e.target.value },
+                    { replace: true, resetPage: true }
+                  )
+                }
               />
             </InputGroup>
             <Combobox.Root
@@ -577,7 +644,12 @@ export function EpisodeTable({
               openOnClick
               collection={collection}
               value={selectedShows}
-              onValueChange={(details) => setSelectedShows(details.value)}
+              onValueChange={(details) =>
+                updateTableParams(
+                  { shows: details.value },
+                  { replace: true, resetPage: true }
+                )
+              }
               onInputValueChange={(details) => filter(details.inputValue)}
               placeholder="Filter by podcast…"
             >
@@ -612,7 +684,10 @@ export function EpisodeTable({
               collection={statusCollection}
               value={selectedStatuses}
               onValueChange={(details) =>
-                setSelectedStatuses(details.value as PlayStatus[])
+                updateTableParams(
+                  { statuses: details.value as PlayStatus[] },
+                  { replace: true, resetPage: true }
+                )
               }
               placeholder="Filter by status…"
             >
@@ -647,7 +722,12 @@ export function EpisodeTable({
                   variant="subtle"
                   cursor="pointer"
                   onClick={() =>
-                    setSelectedShows((prev) => prev.filter((s) => s !== show))
+                    updateTableParams(
+                      {
+                        shows: selectedShows.filter((s) => s !== show),
+                      },
+                      { replace: true, resetPage: true }
+                    )
                   }
                   title="Remove filter"
                 >
@@ -662,8 +742,11 @@ export function EpisodeTable({
                   variant="subtle"
                   cursor="pointer"
                   onClick={() =>
-                    setSelectedStatuses((prev) =>
-                      prev.filter((s) => s !== status)
+                    updateTableParams(
+                      {
+                        statuses: selectedStatuses.filter((s) => s !== status),
+                      },
+                      { replace: true, resetPage: true }
                     )
                   }
                   title="Remove filter"
@@ -772,10 +855,13 @@ export function EpisodeTable({
                   aria-label="Rows per page"
                   value={String(pageSize)}
                   onChange={(e) => {
-                    table.setPageSize(Number(e.target.value));
+                    updateTableParams(
+                      { pageSize: Number(e.target.value) as EpisodePageSize },
+                      { replace: true, resetPage: true }
+                    );
                   }}
                 >
-                  {PAGE_SIZE_OPTIONS.map((size) => (
+                  {EPISODE_PAGE_SIZE_OPTIONS.map((size) => (
                     <option key={size} value={size}>
                       {size}
                     </option>
@@ -789,7 +875,10 @@ export function EpisodeTable({
               pageSize={pageSize}
               page={pageIndex + 1}
               onPageChange={(details) => {
-                table.setPageIndex(details.page - 1);
+                updateTableParams(
+                  { page: details.page },
+                  { replace: false }
+                );
               }}
             >
               <ButtonGroup variant="ghost" size="sm">

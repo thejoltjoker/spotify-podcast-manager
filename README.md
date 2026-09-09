@@ -49,21 +49,21 @@ Open [http://127.0.0.1:5173](http://127.0.0.1:5173) (same host as the redirect U
 The app ships as static assets via [`wrangler.jsonc`](wrangler.jsonc) (`dist/` + SPA fallback for `/callback`).
 
 1. In the Worker → **Settings** → **Build**, set:
-   - **Build command:** `npm run build`
-   - **Deploy command:** `npx wrangler deploy` (default)
+   - **Build command:** `pnpm run build`
+   - **Deploy command:** `pnpm exec wrangler deploy` (do not use `pnpx`/`npx` — pnpm 12 blocks build scripts for freshly downloaded Wrangler)
    - **Build variable:** `VITE_SPOTIFY_CLIENT_ID` = your Spotify Client ID
-2. Push to the connected GitHub branch (or run `npm run deploy` locally).
+2. Push to the connected GitHub branch (or run `pnpm run deploy` locally).
 3. In the Spotify Dashboard, add redirect URI `https://<your-worker-host>/callback`.
 
 ## Scripts
 
-| Command           | Description                        |
-| ----------------- | ---------------------------------- |
-| `npm run dev`     | Start Vite dev server              |
-| `npm run build`   | Typecheck and production build     |
-| `npm run preview` | Preview production build           |
-| `npm run deploy`  | Build and deploy with Wrangler     |
-| `npm run lint`    | Run oxlint                         |
+| Command            | Description                        |
+| ------------------ | ---------------------------------- |
+| `pnpm run dev`     | Start Vite dev server              |
+| `pnpm run build`   | Typecheck and production build     |
+| `pnpm run preview` | Preview production build           |
+| `pnpm run deploy`  | Build and deploy with Wrangler     |
+| `pnpm run lint`    | Run oxlint                         |
 
 ## Scopes
 

@@ -32,6 +32,7 @@ import {
   type SortingState,
 } from '@tanstack/react-table'
 import {
+  LuAppWindow,
   LuBookmark,
   LuBookmarkMinus,
   LuChevronLeft,
@@ -223,38 +224,50 @@ export function ShowEpisodeTable({
           return (
             <>
               <HStack gap="0" display={{ base: 'none', xl: 'flex' }}>
-                <IconButton
-                  asChild
-                  size="sm"
-                  variant="ghost"
-                  aria-label="Open in Spotify"
-                >
-                  <Link
-                    href={episode.spotifyUrl}
-                    target="_blank"
-                    rel="noreferrer"
+                <Tooltip content="Open in Spotify app">
+                  <IconButton
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Open in Spotify app"
                   >
-                    <LuExternalLink />
-                  </Link>
-                </IconButton>
-                <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                    <Link href={episode.uri}>
+                      <LuAppWindow />
+                    </Link>
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content="Open in browser">
+                  <IconButton
+                    asChild
+                    size="sm"
+                    variant="ghost"
+                    aria-label="Open in browser"
+                  >
+                    <Link
+                      href={episode.spotifyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <LuExternalLink />
+                    </Link>
+                  </IconButton>
+                </Tooltip>
+                <Tooltip content={playbackTitle ?? 'Play now'}>
                   <IconButton
                     size="sm"
                     variant="ghost"
                     aria-label={`Play “${episode.name}”`}
-                    title={playbackTitle ?? 'Play now'}
                     disabled={playbackDisabled}
                     onClick={() => void onPlay([episode])}
                   >
                     <LuPlay />
                   </IconButton>
                 </Tooltip>
-                <Tooltip content={PREMIUM_HINT} disabled={playbackAllowed}>
+                <Tooltip content={playbackTitle ?? 'Add to queue'}>
                   <IconButton
                     size="sm"
                     variant="ghost"
                     aria-label={`Add “${episode.name}” to queue`}
-                    title={playbackTitle ?? 'Add to queue'}
                     disabled={playbackDisabled}
                     onClick={() => void onQueue([episode])}
                   >
@@ -262,29 +275,31 @@ export function ShowEpisodeTable({
                   </IconButton>
                 </Tooltip>
                 {episode.savedInLibrary ? (
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    colorPalette="red"
-                    aria-label={`Remove “${episode.name}” from library`}
-                    title="Remove from library"
-                    disabled={actionsDisabled}
-                    onClick={() => void onRemove([episode])}
-                  >
-                    <LuBookmarkMinus />
-                  </IconButton>
+                  <Tooltip content="Remove from library">
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      colorPalette="red"
+                      aria-label={`Remove “${episode.name}” from library`}
+                      disabled={actionsDisabled}
+                      onClick={() => void onRemove([episode])}
+                    >
+                      <LuBookmarkMinus />
+                    </IconButton>
+                  </Tooltip>
                 ) : (
-                  <IconButton
-                    size="sm"
-                    variant="ghost"
-                    colorPalette="green"
-                    aria-label={`Save “${episode.name}” to library`}
-                    title="Save to library"
-                    disabled={actionsDisabled}
-                    onClick={() => void onSave([episode])}
-                  >
-                    <LuBookmark />
-                  </IconButton>
+                  <Tooltip content="Save to library">
+                    <IconButton
+                      size="sm"
+                      variant="ghost"
+                      colorPalette="green"
+                      aria-label={`Save “${episode.name}” to library`}
+                      disabled={actionsDisabled}
+                      onClick={() => void onSave([episode])}
+                    >
+                      <LuBookmark />
+                    </IconButton>
+                  </Tooltip>
                 )}
               </HStack>
 
@@ -302,14 +317,20 @@ export function ShowEpisodeTable({
                   <Portal>
                     <Menu.Positioner>
                       <Menu.Content>
-                        <Menu.Item value="open" asChild>
+                        <Menu.Item value="open-app" asChild>
+                          <Link href={episode.uri}>
+                            <LuAppWindow />
+                            Open in Spotify app
+                          </Link>
+                        </Menu.Item>
+                        <Menu.Item value="open-web" asChild>
                           <Link
                             href={episode.spotifyUrl}
                             target="_blank"
                             rel="noreferrer"
                           >
                             <LuExternalLink />
-                            Open in Spotify
+                            Open in browser
                           </Link>
                         </Menu.Item>
                         <Menu.Item
